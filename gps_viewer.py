@@ -1801,6 +1801,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('GPS Viewer')
         self.resize(1380, 840)
         self._gps: GPSData | None = None
+        self._current_track_path: Path = _TRACKS_JSON   # fichier de trace actif
         self._build_ui()
         self._build_menus()
         self.setAcceptDrops(True)
@@ -1974,6 +1975,20 @@ class MainWindow(QMainWindow):
         fm.addSeparator()
         self._recent_menu = fm.addMenu('Fichiers récents')
         self._refresh_recent_menu()
+
+        fm.addSeparator()
+
+        self._act_save = QAction('Enregistrer', self)
+        self._act_save.setShortcut('Ctrl+S')
+        self._act_save.setToolTip('Enregistrer la trace photo (Ctrl+S)')
+        self._act_save.triggered.connect(self._track_save)
+        fm.addAction(self._act_save)
+
+        act_save_as = QAction('Enregistrer sous…', self)
+        act_save_as.setShortcut('Ctrl+Shift+S')
+        act_save_as.setToolTip('Enregistrer la trace photo sous un autre nom (Ctrl+Shift+S)')
+        act_save_as.triggered.connect(self._track_save_as)
+        fm.addAction(act_save_as)
 
         fm.addSeparator()
 
@@ -2334,8 +2349,8 @@ class MainWindow(QMainWindow):
         return orig_dest, thumb_dest
 
     def _save_track_json(self):
-        """Sauvegarde toutes les positions photo dans tracks/track.json."""
-        _TRACKS_DIR.mkdir(parents=True, exist_ok=True)
+        """Sauvegarde toutes les positions photo dans le fichier de trace actif."""
+        self._current_track_path.parent.mkdir(parents=True, exist_ok=True)
         photos = [
             {
                 'lat':         round(e['lat'], 8),
@@ -2344,20 +2359,21 @@ class MainWindow(QMainWindow):
                 'thumb':       e['thumb_path'],
                 'titre':       e.get('titre', ''),
                 'description': e.get('description', ''),
-                'angle':       e.get('angle'),   # None si pas d'œil
+                'angle':       e.get('angle'),
             }
             for e in self._map._photo_data
         ]
-        _TRACKS_JSON.write_text(
+        self._current_track_path.write_text(
             json.dumps({'photos': photos}, ensure_ascii=False, indent=2),
             encoding='utf-8')
+        self._update_track_title()
 
     def _load_track_json(self):
-        """Charge les annotations photo sauvegardées (dessinées au prochain load)."""
-        if not _TRACKS_JSON.exists():
+        """Charge les annotations photo depuis le fichier de trace actif."""
+        if not self._current_track_path.exists():
             return
         try:
-            data    = json.loads(_TRACKS_JSON.read_text(encoding='utf-8'))
+            data    = json.loads(self._current_track_path.read_text(encoding='utf-8'))
             entries = []
             for item in data.get('photos', []):
                 lat, lon  = item['lat'], item['lon']
@@ -2379,6 +2395,37 @@ class MainWindow(QMainWindow):
             self._map.load_photo_data(entries)
         except Exception:
             pass
+
+    # ── Enregistrement de la trace ────────────────────────────────────
+
+    def _track_save(self):
+        """Enregistre dans le fichier de trace actif (Ctrl+S)."""
+        self._save_track_json()
+        self._sb.showMessage(
+            f'Trace enregistrée : {self._current_track_path.name}')
+
+    def _track_save_as(self):
+        """Enregistre sous un nouveau nom (Ctrl+Shift+S)."""
+        default_dir  = str(self._current_track_path.parent)
+        default_name = str(self._current_track_path)
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Enregistrer la trace sous…',
+            default_name,
+            'Fichiers JSON (*.json);;Tous les fichiers (*)')
+        if not path:
+            return
+        p = Path(path)
+        if p.suffix.lower() != '.json':
+            p = p.with_suffix('.json')
+        self._current_track_path = p
+        self._save_track_json()
+        self._sb.showMessage(f'Trace enregistrée sous : {p.name}')
+
+    def _update_track_title(self):
+        """Affiche le nom du fichier de trace dans la barre de titre."""
+        gps_part   = f' — {self._gps.filename}' if self._gps else ''
+        track_part = self._current_track_path.name
+        self.setWindowTitle(f'GPS Viewer{gps_part}  [{track_part}]')
 
     def _about(self):
         QMessageBox.about(self, 'À propos — GPS Viewer',
