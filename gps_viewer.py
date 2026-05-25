@@ -340,7 +340,9 @@ class GPSData:
 # ══════════════════════════════════════════════════════════════════════
 
 class MapCanvas(FigureCanvas):
-    tile_loading = pyqtSignal(bool)   # True = début, False = fin
+    tile_loading           = pyqtSignal(bool)   # True = début, False = fin
+    measure_updated        = pyqtSignal(str)    # message status bar
+    measure_mode_cancelled = pyqtSignal()       # Échap appuyé en mode mesure
 
     def __init__(self):
         self.fig = Figure(facecolor='#2b2b2b')
@@ -376,6 +378,13 @@ class MapCanvas(FigureCanvas):
         # ── Indicateur de chargement ─────────────────────────────────
         self._loading_text = None  # text artist, None si axes vidés
 
+        # ── Mesure de distance ───────────────────────────────────────
+        self._measure_mode  = False
+        self._meas_pts      = []    # [(x_m, y_m), …] points placés
+        self._meas_artists  = []    # artists permanents à nettoyer
+        self._meas_rubber   = None  # ligne rubber-band live
+        self._meas_lbl_live = None  # label distance live
+
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
         self._pan_lims = None   # (xlim, ylim) au début du drag
@@ -384,11 +393,12 @@ class MapCanvas(FigureCanvas):
         self._tile_timer = QTimer(singleShot=True, interval=450)
         self._tile_timer.timeout.connect(self._reload_tiles)
 
-        # ── Événements souris ────────────────────────────────────────
+        # ── Événements souris / clavier ──────────────────────────────
         self.mpl_connect('scroll_event',         self._on_scroll)
         self.mpl_connect('button_press_event',   self._on_press)
         self.mpl_connect('motion_notify_event',  self._on_motion)
         self.mpl_connect('button_release_event', self._on_release)
+        self.mpl_connect('key_press_event',      self._on_key)
 
         self.setCursor(Qt.OpenHandCursor)
         self._welcome()
@@ -411,6 +421,9 @@ class MapCanvas(FigureCanvas):
         self._ov_ax        = None
         self._ov_rect      = None
         self._grid_artists = []
+        self._meas_pts     = []
+        self._meas_artists = []
+        self._meas_rubber  = self._meas_lbl_live = None
         self.ax.cla()
         self.ax.set_axis_off()
         self.ax.set_aspect('equal', adjustable='datalim')
@@ -844,12 +857,20 @@ class MapCanvas(FigureCanvas):
     # ── Pan (clic gauche + glisser) ──────────────────────────────────
 
     def _on_press(self, event):
+        if self._measure_mode:
+            if event.button == 1 and event.inaxes == self.ax and event.xdata is not None:
+                self._meas_add_point(event.xdata, event.ydata)
+            return
         if event.button == 1 and event.inaxes == self.ax and self._default_lim is not None:
             self._pan_xy   = (event.x, event.y)
             self._pan_lims = (self.ax.get_xlim(), self.ax.get_ylim())
             self.setCursor(Qt.ClosedHandCursor)
 
     def _on_motion(self, event):
+        if self._measure_mode:
+            if self._meas_pts and event.inaxes == self.ax and event.xdata is not None:
+                self._meas_update_rubber(event.xdata, event.ydata)
+            return
         if self._pan_xy is None or self._default_lim is None:
             return
         dpx = event.x - self._pan_xy[0]
@@ -869,6 +890,8 @@ class MapCanvas(FigureCanvas):
             self.draw_idle()
 
     def _on_release(self, event):
+        if self._measure_mode:
+            return
         if event.button == 1 and self._pan_xy is not None:
             self._pan_xy = None
             self.setCursor(Qt.OpenHandCursor)
@@ -902,6 +925,9 @@ class MapCanvas(FigureCanvas):
         self._ov_ax        = None
         self._ov_rect      = None
         self._grid_artists = []
+        self._meas_pts     = []
+        self._meas_artists = []
+        self._meas_rubber  = self._meas_lbl_live = None
         self._default_lim  = (xlim, ylim)
 
         self.ax.cla()
@@ -931,6 +957,130 @@ class MapCanvas(FigureCanvas):
         else:
             self._cursor_dot.set_visible(False)
         self.draw_idle()
+
+    # ── Mesure de distance ───────────────────────────────────────────
+
+    def set_measure_mode(self, active: bool):
+        self._measure_mode = active
+        if active:
+            self._clear_measure()
+            self.setCursor(Qt.CrossCursor)
+            self.measure_updated.emit(
+                'Mesure : cliquez pour placer le point A  •  Échap pour annuler')
+        else:
+            self._clear_measure()
+            self.setCursor(Qt.OpenHandCursor)
+            self.measure_updated.emit('')
+
+    def _clear_measure(self):
+        for a in self._meas_artists:
+            try:
+                a.remove()
+            except Exception:
+                pass
+        self._meas_artists = []
+        self._meas_pts     = []
+        for a in (self._meas_rubber, self._meas_lbl_live):
+            if a is not None:
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+        self._meas_rubber = self._meas_lbl_live = None
+        self.draw_idle()
+
+    def _meas_add_point(self, x: float, y: float):
+        """Place un nouveau point de mesure et fige le segment précédent."""
+        # Supprime le rubber-band live
+        for a in (self._meas_rubber, self._meas_lbl_live):
+            if a is not None:
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+        self._meas_rubber = self._meas_lbl_live = None
+
+        # Marqueur du nouveau point
+        dot, = self.ax.plot(x, y, 'o', color='#e67e22', markersize=9,
+                            zorder=9, markeredgecolor='white',
+                            markeredgewidth=1.5)
+        self._meas_artists.append(dot)
+
+        if self._meas_pts:
+            x0, y0 = self._meas_pts[-1]
+            seg_m  = self._meas_dist_m(x0, y0, x, y)
+            total_m = sum(
+                self._meas_dist_m(self._meas_pts[i][0], self._meas_pts[i][1],
+                                  self._meas_pts[i+1][0], self._meas_pts[i+1][1])
+                for i in range(len(self._meas_pts) - 1)
+            ) + seg_m
+
+            seg_line, = self.ax.plot(
+                [x0, x], [y0, y], color='#e67e22',
+                linewidth=1.8, linestyle='--', zorder=8)
+            self._meas_artists.append(seg_line)
+
+            txt = self._fmt_dist(seg_m)
+            if len(self._meas_pts) >= 2:
+                txt += f'\n∑ {self._fmt_dist(total_m)}'
+            lbl = self.ax.text(
+                (x0 + x) / 2, (y0 + y) / 2, txt,
+                fontsize=8, color='#222', zorder=10,
+                ha='center', va='center',
+                bbox=dict(boxstyle='round,pad=0.28', facecolor='#fff8dc',
+                          alpha=0.92, edgecolor='#e67e22', linewidth=0.8))
+            self._meas_artists.append(lbl)
+
+            self.measure_updated.emit(
+                f'Segment : {self._fmt_dist(seg_m)}  •  '
+                f'Total : {self._fmt_dist(total_m)}  •  '
+                f'Cliquez pour continuer  •  Échap pour annuler')
+        else:
+            self.measure_updated.emit(
+                f'Point A posé  •  Cliquez pour placer le point B  •  '
+                f'Échap pour annuler')
+
+        self._meas_pts.append((x, y))
+        self.draw_idle()
+
+    def _meas_update_rubber(self, x: float, y: float):
+        """Met à jour la ligne rubber-band et le label de distance live."""
+        x0, y0 = self._meas_pts[-1]
+        dist_m = self._meas_dist_m(x0, y0, x, y)
+
+        for a in (self._meas_rubber, self._meas_lbl_live):
+            if a is not None:
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+
+        self._meas_rubber, = self.ax.plot(
+            [x0, x], [y0, y], color='#e67e22',
+            linewidth=1.3, linestyle=':', zorder=8, alpha=0.75)
+        self._meas_lbl_live = self.ax.text(
+            x, y, f'  {self._fmt_dist(dist_m)}',
+            fontsize=8, color='#c0392b', zorder=10,
+            ha='left', va='bottom',
+            bbox=dict(boxstyle='round,pad=0.2', facecolor='white',
+                      alpha=0.78, edgecolor='none'))
+        self.draw_idle()
+
+    def _on_key(self, event):
+        if event.key == 'escape' and self._measure_mode:
+            self.measure_mode_cancelled.emit()
+
+    @staticmethod
+    def _meas_dist_m(x0: float, y0: float, x1: float, y1: float) -> float:
+        lat0, lon0 = _webmerc_to_latlon(x0, y0)
+        lat1, lon1 = _webmerc_to_latlon(x1, y1)
+        return haversine_m(lat0, lon0, lat1, lon1)
+
+    @staticmethod
+    def _fmt_dist(m: float) -> str:
+        if m < 1000:
+            return f'{m:.0f} m'
+        return f'{m / 1000:.3f} km'
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1306,6 +1456,15 @@ class MainWindow(QMainWindow):
         self._btn_color.setMenu(menu_color)
         tb.addWidget(self._btn_color)
 
+        # ── Mesure de distance ───────────────────────────────────────
+        self._act_meas = QAction('📏  Mesure', self)
+        self._act_meas.setCheckable(True)
+        self._act_meas.setShortcut('Ctrl+D')
+        self._act_meas.setToolTip(
+            'Mesure de distance clic-à-clic (Ctrl+D)  •  Échap pour annuler')
+        self._act_meas.toggled.connect(self._map.set_measure_mode)
+        tb.addAction(self._act_meas)
+
         # ── Grille / miniature ───────────────────────────────────────
         act_grid = QAction('⊞  Grille', self)
         act_grid.setCheckable(True)
@@ -1330,6 +1489,9 @@ class MainWindow(QMainWindow):
         # Canvases
         self._map       = MapCanvas()
         self._map.tile_loading.connect(self._on_tile_loading)
+        self._map.measure_updated.connect(self._sb.showMessage)
+        self._map.measure_mode_cancelled.connect(
+            lambda: self._act_meas.setChecked(False))
         self._chart_alt = ChartCanvas('Profil altimétrique', C_ALT, self._on_hover)
         self._chart_spd = ChartCanvas('Vitesse (km/h)',       C_SPD, self._on_hover)
         self._stats     = StatsPanel()
