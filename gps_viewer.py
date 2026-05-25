@@ -285,7 +285,7 @@ class MapCanvas(FigureCanvas):
         """Change la source de tuiles et recharge la carte."""
         self._tile_source  = source
         self._tile_headers = headers or {}
-        if self._gps is not None:
+        if self._default_lim is not None:
             self._reload_tiles()
 
     # ── Rechargement tuiles après zoom/pan ──────────────────────────
