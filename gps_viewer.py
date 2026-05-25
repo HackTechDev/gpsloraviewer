@@ -12,6 +12,7 @@ import os
 import math
 import glob
 import shutil
+import json
 from collections import OrderedDict
 from pathlib import Path
 
@@ -20,6 +21,8 @@ import matplotlib
 matplotlib.use('Qt5Agg')
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.collections import LineCollection
+import matplotlib.colors as mcolors
 import matplotlib.ticker as mticker
 import contextily as cx
 
@@ -41,7 +44,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QAction,
     QFileDialog, QStatusBar, QMessageBox,
     QFrame, QToolBar, QSizePolicy,
-    QToolButton, QMenu,
+    QToolButton, QMenu, QProgressBar,
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
@@ -56,6 +59,16 @@ C_START   = '#2ecc71'
 C_END     = '#e74c3c'
 
 WEB_MERC_R = 6_378_137.0
+
+_CONFIG_DIR  = Path.home() / '.config' / 'gps_viewer'
+_RECENT_FILE = _CONFIG_DIR / 'recent.json'
+_MAX_RECENT  = 10
+
+# ── Colormaps pour les modes de trace ────────────────────────────────
+_CMAP_ALT = mcolors.LinearSegmentedColormap.from_list(
+    'alt', ['#3949ab', '#26c6da', '#43a047', '#fdd835', '#e53935'])
+_CMAP_SPD = mcolors.LinearSegmentedColormap.from_list(
+    'spd', ['#27ae60', '#f39c12', '#e74c3c'])
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -138,6 +151,12 @@ def to_webmerc(lat: float, lon: float):
     x = math.radians(lon) * WEB_MERC_R
     y = math.log(math.tan(math.radians(lat)/2 + math.pi/4)) * WEB_MERC_R
     return x, y
+
+
+def _webmerc_to_latlon(x: float, y: float):
+    lon = math.degrees(x / WEB_MERC_R)
+    lat = math.degrees(2 * math.atan(math.exp(y / WEB_MERC_R)) - math.pi / 2)
+    return lat, lon
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -321,6 +340,8 @@ class GPSData:
 # ══════════════════════════════════════════════════════════════════════
 
 class MapCanvas(FigureCanvas):
+    tile_loading = pyqtSignal(bool)   # True = début, False = fin
+
     def __init__(self):
         self.fig = Figure(facecolor='#2b2b2b')
         super().__init__(self.fig)
@@ -338,8 +359,19 @@ class MapCanvas(FigureCanvas):
         self._tile_worker: _TileWorker | None = None
         self._pending_key = None   # clé de la dernière requête en cours
 
-        # ── Simplification de trace ──────────────────────────────────
-        self._track_line  = None   # artist matplotlib de la trace
+        # ── Simplification / coloration de trace ────────────────────
+        self._track_line   = None   # artist ou LineCollection de la trace
+        self._track_mode   = 'flat' # 'flat' | 'altitude' | 'speed'
+        self._colorbar_ax  = None   # inset axes pour la colorbar
+
+        # ── Miniature de localisation ────────────────────────────────
+        self._ov_ax        = None   # inset axes de la miniature
+        self._ov_rect      = None   # patch rectangle vue courante
+        self._ov_visible   = False
+
+        # ── Grille de coordonnées ────────────────────────────────────
+        self._grid_artists = []     # tous les artists de la grille
+        self._grid_visible = False
 
         # ── Indicateur de chargement ─────────────────────────────────
         self._loading_text = None  # text artist, None si axes vidés
@@ -373,8 +405,12 @@ class MapCanvas(FigureCanvas):
 
     def load(self, gps: GPSData):
         self._gps = gps
-        self._loading_text = None   # les ax.cla() invalident le text artist
+        self._loading_text = None
         self._track_line   = None
+        self._colorbar_ax  = None
+        self._ov_ax        = None
+        self._ov_rect      = None
+        self._grid_artists = []
         self.ax.cla()
         self.ax.set_axis_off()
         self.ax.set_aspect('equal', adjustable='datalim')
@@ -397,10 +433,7 @@ class MapCanvas(FigureCanvas):
 
     def _draw_track(self):
         gps = self._gps
-        xs, ys = self._simplified_track()
-        self._track_line, = self.ax.plot(
-            xs, ys, color=C_TRACK, linewidth=2.5, zorder=5,
-            solid_capstyle='round', solid_joinstyle='round')
+        self._track_line = self._add_track_artist()
         self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
                      color=C_START, markersize=13, zorder=7,
                      markeredgecolor='white', markeredgewidth=2, label='Départ')
@@ -412,6 +445,77 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot, = self.ax.plot([], [], 'o',
             color=C_CURSOR, markersize=12, zorder=10,
             markeredgecolor='white', markeredgewidth=1.5, visible=False)
+        if self._track_mode != 'flat':
+            self._draw_colorbar()
+
+    def _add_track_artist(self):
+        """Crée et retourne l'artist de trace selon le mode courant."""
+        gps = self._gps
+        if self._track_mode == 'flat':
+            xs, ys = self._simplified_track()
+            line, = self.ax.plot(
+                xs, ys, color=C_TRACK, linewidth=2.5, zorder=5,
+                solid_capstyle='round', solid_joinstyle='round')
+            return line
+
+        # Modes gradient : altitude ou vitesse
+        if self._track_mode == 'altitude':
+            raw = np.array([p['alt'] if p['alt'] is not None else 0
+                            for p in gps.points], dtype=float)
+            cmap  = _CMAP_ALT
+            label = 'Alt (m)'
+        else:  # speed
+            raw   = np.array([s if s is not None else 0
+                              for s in gps.speeds], dtype=float)
+            cmap  = _CMAP_SPD
+            label = 'Vit (km/h)'
+
+        xs, ys, vals = self._simplified_track_values(raw)
+        vmin, vmax = vals.min(), vals.max()
+        if vmin == vmax:
+            vmax = vmin + 1
+
+        pts  = np.array([xs, ys]).T.reshape(-1, 1, 2)
+        segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
+        seg_vals = (vals[:-1] + vals[1:]) / 2
+
+        norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+        lc   = LineCollection(segs, cmap=cmap, norm=norm,
+                              linewidth=2.5, zorder=5,
+                              capstyle='round', joinstyle='round')
+        lc.set_array(seg_vals)
+        self.ax.add_collection(lc)
+        return lc
+
+    def _draw_colorbar(self):
+        """Ajoute une colorbar en inset."""
+        if self._colorbar_ax is not None:
+            try:
+                self._colorbar_ax.remove()
+            except Exception:
+                pass
+        self._colorbar_ax = self.fig.add_axes([0.015, 0.18, 0.018, 0.30])
+        if self._track_mode == 'altitude':
+            raw   = np.array([p['alt'] if p['alt'] is not None else 0
+                              for p in self._gps.points], dtype=float)
+            cmap  = _CMAP_ALT
+            label = 'Alt (m)'
+        else:
+            raw   = np.array([s if s is not None else 0
+                              for s in self._gps.speeds], dtype=float)
+            cmap  = _CMAP_SPD
+            label = 'Vit (km/h)'
+        vmin, vmax = raw.min(), raw.max()
+        if vmin == vmax:
+            vmax = vmin + 1
+        sm = matplotlib.cm.ScalarMappable(
+            cmap=cmap, norm=mcolors.Normalize(vmin=vmin, vmax=vmax))
+        sm.set_array([])
+        cb = self.fig.colorbar(sm, cax=self._colorbar_ax)
+        cb.ax.tick_params(labelsize=7, colors='#555')
+        cb.ax.yaxis.set_tick_params(color='#888')
+        cb.set_label(label, fontsize=7, color='#555')
+        cb.outline.set_edgecolor('#888')
 
     def _add_tiles(self):
         try:
@@ -474,17 +578,37 @@ class MapCanvas(FigureCanvas):
         mask = _douglas_peucker_mask(gps.xs, gps.ys, self._dp_epsilon())
         return gps.xs[mask], gps.ys[mask]
 
+    def _simplified_track_values(self, values: np.ndarray):
+        """Retourne (xs, ys, values) après Douglas-Peucker."""
+        gps = self._gps
+        if gps is None or gps.count < 500:
+            return gps.xs, gps.ys, values
+        mask = _douglas_peucker_mask(gps.xs, gps.ys, self._dp_epsilon())
+        return gps.xs[mask], gps.ys[mask], values[mask]
+
     def _redraw_track_line(self):
-        """Remplace le polyline de la trace avec la simplification courante."""
+        """Remplace l'artist de la trace avec la simplification courante."""
         if self._track_line is not None:
             self._track_line.remove()
             self._track_line = None
+        if self._colorbar_ax is not None:
+            try:
+                self._colorbar_ax.remove()
+            except Exception:
+                pass
+            self._colorbar_ax = None
         if self._gps is None:
             return
-        xs, ys = self._simplified_track()
-        self._track_line, = self.ax.plot(
-            xs, ys, color=C_TRACK, linewidth=2.5, zorder=5,
-            solid_capstyle='round', solid_joinstyle='round')
+        self._track_line = self._add_track_artist()
+        if self._track_mode != 'flat':
+            self._draw_colorbar()
+
+    def set_track_mode(self, mode: str):
+        """Change le mode de coloration : 'flat', 'altitude', 'speed'."""
+        self._track_mode = mode
+        if self._gps is not None:
+            self._redraw_track_line()
+            self.draw_idle()
 
     # ── Chargement asynchrone des tuiles ─────────────────────────────
 
@@ -502,10 +626,14 @@ class MapCanvas(FigureCanvas):
         cached = self._tile_cache.get(key)
         if cached is not None:
             self._apply_tiles(*cached)
+            self._update_overview()
+            if self._grid_visible:
+                self._draw_grid()
             return
 
         self._pending_key  = key
         self._show_loading()
+        self.tile_loading.emit(True)
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
         self._tile_worker = _TileWorker(
             xl, yl, zoom, self._tile_source, self._tile_headers, key)
@@ -528,9 +656,14 @@ class MapCanvas(FigureCanvas):
         self._tile_cache.put(key, (img, ext))
         self._apply_tiles(img, ext)
         self._hide_loading()
+        self.tile_loading.emit(False)
+        self._update_overview()
+        if self._grid_visible:
+            self._draw_grid()
 
     def _on_tiles_failed(self, msg: str):
         self._hide_loading()
+        self.tile_loading.emit(False)
         self.ax.set_facecolor('#d9e8f5')
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
         self.ax.text(0.5, 0.02, f'Tuiles indisponibles : {msg}',
@@ -556,6 +689,126 @@ class MapCanvas(FigureCanvas):
         if self._loading_text is not None:
             self._loading_text.set_visible(False)
         self.draw_idle()
+
+    # ── Miniature de localisation ────────────────────────────────────
+
+    def toggle_overview(self, visible: bool):
+        self._ov_visible = visible
+        if not visible:
+            if self._ov_ax is not None:
+                self._ov_ax.set_visible(False)
+            self.draw_idle()
+            return
+        if self._gps is None:
+            return
+        if self._ov_ax is None:
+            self._ov_ax = self.fig.add_axes(
+                [0.72, 0.02, 0.265, 0.22], zorder=15)
+            self._ov_ax.set_axis_off()
+            self._ov_ax.patch.set_alpha(0.82)
+            self._ov_ax.patch.set_facecolor('#f5f5f5')
+            gps = self._gps
+            self._ov_ax.plot(gps.xs, gps.ys,
+                             color='#7f8c8d', linewidth=1, zorder=1)
+            self._ov_ax.plot(gps.xs[0], gps.ys[0], 'o',
+                             color=C_START, markersize=4, zorder=2)
+            self._ov_ax.plot(gps.xs[-1], gps.ys[-1], 's',
+                             color=C_END, markersize=4, zorder=2)
+            self._ov_ax.set_xlim(gps.xs.min(), gps.xs.max())
+            self._ov_ax.set_ylim(gps.ys.min(), gps.ys.max())
+            for sp in self._ov_ax.spines.values():
+                sp.set_edgecolor('#aaa')
+                sp.set_linewidth(0.8)
+        else:
+            self._ov_ax.set_visible(True)
+        self._ov_rect = None
+        self._update_overview()
+
+    def _update_overview(self):
+        if not self._ov_visible or self._ov_ax is None:
+            return
+        if self._ov_rect is not None:
+            self._ov_rect.remove()
+            self._ov_rect = None
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        from matplotlib.patches import FancyBboxPatch
+        self._ov_rect = FancyBboxPatch(
+            (xl[0], yl[0]), xl[1] - xl[0], yl[1] - yl[0],
+            boxstyle='square,pad=0',
+            linewidth=1.2, edgecolor='#e74c3c',
+            facecolor='#e74c3c', alpha=0.18, zorder=3)
+        self._ov_ax.add_patch(self._ov_rect)
+        self.draw_idle()
+
+    # ── Grille de coordonnées lat/lon ────────────────────────────────
+
+    def toggle_grid(self, visible: bool):
+        self._grid_visible = visible
+        if visible:
+            self._draw_grid()
+        else:
+            self._clear_grid()
+        self.draw_idle()
+
+    def _clear_grid(self):
+        for a in self._grid_artists:
+            try:
+                a.remove()
+            except Exception:
+                pass
+        self._grid_artists = []
+
+    def _draw_grid(self):
+        self._clear_grid()
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        lat_s, lon_w = _webmerc_to_latlon(xl[0], yl[0])
+        lat_n, lon_e = _webmerc_to_latlon(xl[1], yl[1])
+        span_lat = lat_n - lat_s
+        span_lon = lon_e - lon_w
+
+        def _nice_step(span):
+            nice = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05,
+                    0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 45]
+            target = span / 5
+            for s in nice:
+                if s >= target:
+                    return s
+            return 45
+
+        step_lat = _nice_step(span_lat)
+        step_lon = _nice_step(span_lon)
+
+        lat0 = math.ceil(lat_s / step_lat) * step_lat
+        lon0 = math.ceil(lon_w / step_lon) * step_lon
+
+        style = dict(color='#444', linewidth=0.55, linestyle='--',
+                     alpha=0.55, zorder=6)
+
+        lat = lat0
+        while lat <= lat_n + step_lat * 0.01:
+            x0, y0 = to_webmerc(lat, lon_w)
+            x1, y1 = to_webmerc(lat, lon_e)
+            ln, = self.ax.plot([x0, x1], [y0, y1], **style)
+            lbl = self.ax.text(
+                xl[0] + (xl[1]-xl[0]) * 0.005, y0,
+                f'{lat:.4g}°N', fontsize=7, color='#333',
+                va='center', zorder=7,
+                bbox=dict(facecolor='white', alpha=0.6, pad=1, edgecolor='none'))
+            self._grid_artists += [ln, lbl]
+            lat += step_lat
+
+        lon = lon0
+        while lon <= lon_e + step_lon * 0.01:
+            x0, y0 = to_webmerc(lat_s, lon)
+            x1, y1 = to_webmerc(lat_n, lon)
+            ln, = self.ax.plot([x0, x1], [y0, y1], **style)
+            lbl = self.ax.text(
+                x0, yl[0] + (yl[1]-yl[0]) * 0.005,
+                f'{lon:.4g}°E', fontsize=7, color='#333',
+                ha='center', zorder=7, rotation=90,
+                bbox=dict(facecolor='white', alpha=0.6, pad=1, edgecolor='none'))
+            self._grid_artists += [ln, lbl]
+            lon += step_lon
 
     # ── Rechargement tuiles après zoom/pan ──────────────────────────
 
@@ -641,6 +894,10 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot   = None
         self._loading_text = None
         self._track_line   = None
+        self._colorbar_ax  = None
+        self._ov_ax        = None
+        self._ov_rect      = None
+        self._grid_artists = []
         self._default_lim  = (xlim, ylim)
 
         self.ax.cla()
@@ -1030,6 +1287,36 @@ class MainWindow(QMainWindow):
         self._btn_tiles.setMenu(menu_tiles)
         tb.addWidget(self._btn_tiles)
 
+        # ── Coloration de trace ──────────────────────────────────────
+        self._btn_color = QToolButton()
+        self._btn_color.setText('🎨  Trace')
+        self._btn_color.setToolTip('Coloration de la trace')
+        self._btn_color.setPopupMode(QToolButton.InstantPopup)
+        menu_color = QMenu(self._btn_color)
+        for mode, label in [('flat', '— Couleur unie'),
+                             ('altitude', '🏔  Altitude'),
+                             ('speed',    '⚡  Vitesse')]:
+            a = QAction(label, self)
+            a.triggered.connect(lambda c=False, m=mode: self._select_track_mode(m))
+            menu_color.addAction(a)
+        self._btn_color.setMenu(menu_color)
+        tb.addWidget(self._btn_color)
+
+        # ── Grille / miniature ───────────────────────────────────────
+        act_grid = QAction('⊞  Grille', self)
+        act_grid.setCheckable(True)
+        act_grid.setToolTip('Afficher la grille lat/lon (Ctrl+L)')
+        act_grid.setShortcut('Ctrl+L')
+        act_grid.toggled.connect(lambda v: self._map.toggle_grid(v))
+        tb.addAction(act_grid)
+
+        act_ov = QAction('🔍  Miniature', self)
+        act_ov.setCheckable(True)
+        act_ov.setToolTip('Afficher la miniature de localisation (Ctrl+M)')
+        act_ov.setShortcut('Ctrl+M')
+        act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
+        tb.addAction(act_ov)
+
         tb.addSeparator()
 
         self._lbl_tb = QLabel('Aucun fichier chargé')
@@ -1038,6 +1325,7 @@ class MainWindow(QMainWindow):
 
         # Canvases
         self._map       = MapCanvas()
+        self._map.tile_loading.connect(self._on_tile_loading)
         self._chart_alt = ChartCanvas('Profil altimétrique', C_ALT, self._on_hover)
         self._chart_spd = ChartCanvas('Vitesse (km/h)',       C_SPD, self._on_hover)
         self._stats     = StatsPanel()
@@ -1066,10 +1354,22 @@ class MainWindow(QMainWindow):
         h.addWidget(self._stats)
         self.setCentralWidget(center)
 
-        # Status bar
+        # Status bar + barre de progression tuiles
         self._sb = QStatusBar()
         self._sb.setStyleSheet('font-size:11px; color:#555;')
         self.setStatusBar(self._sb)
+
+        self._tile_progress = QProgressBar()
+        self._tile_progress.setRange(0, 0)          # indéterminé = pulsation
+        self._tile_progress.setFixedWidth(140)
+        self._tile_progress.setFixedHeight(14)
+        self._tile_progress.setTextVisible(False)
+        self._tile_progress.setVisible(False)
+        self._tile_progress.setStyleSheet(
+            'QProgressBar { border:1px solid #ccc; border-radius:3px; background:#eee; }'
+            'QProgressBar::chunk { background:#1a6fbf; border-radius:3px; }')
+        self._sb.addPermanentWidget(self._tile_progress)
+
         size_mb = _cache_size_mb()
         cache_msg = f'{size_mb:.1f} Mo en cache' if size_mb >= 0.01 else 'cache vide'
         self._sb.showMessage(f'Prêt — Ouvrir un fichier GPS pour commencer  •  {cache_msg}')
@@ -1082,6 +1382,10 @@ class MainWindow(QMainWindow):
         a.setShortcut('Ctrl+O')
         a.triggered.connect(self._open_dialog)
         fm.addAction(a)
+
+        fm.addSeparator()
+        self._recent_menu = fm.addMenu('Fichiers récents')
+        self._refresh_recent_menu()
 
         fm.addSeparator()
 
@@ -1166,6 +1470,7 @@ class MainWindow(QMainWindow):
             return
 
         self._gps = GPSData(points, filepath)
+        self._add_to_recent(filepath)
         self._map.load(self._gps)
         self._chart_alt.load(self._gps.distances, self._gps.alts,  'Altitude (m)')
         self._chart_spd.load(self._gps.distances, self._gps.speeds,'Vitesse (km/h)')
@@ -1194,6 +1499,69 @@ class MainWindow(QMainWindow):
         self._chart_spd.update_cursor(index)
         if self._gps:
             self._stats.update_cursor(self._gps, index)
+
+    # ── Barre de progression tuiles ──────────────────────────────────
+
+    def _on_tile_loading(self, started: bool):
+        self._tile_progress.setVisible(started)
+
+    # ── Coloration de trace ──────────────────────────────────────────
+
+    def _select_track_mode(self, mode: str):
+        labels = {'flat': 'Trace', 'altitude': 'Trace ▲alt', 'speed': 'Trace ⚡vit'}
+        self._btn_color.setText(f'🎨  {labels.get(mode, "Trace")}')
+        self._map.set_track_mode(mode)
+
+    # ── Fichiers récents ─────────────────────────────────────────────
+
+    def _load_recent(self) -> list:
+        try:
+            if _RECENT_FILE.exists():
+                return json.loads(_RECENT_FILE.read_text(encoding='utf-8'))
+        except Exception:
+            pass
+        return []
+
+    def _save_recent(self, files: list):
+        try:
+            _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            _RECENT_FILE.write_text(
+                json.dumps(files, ensure_ascii=False, indent=2), encoding='utf-8')
+        except Exception:
+            pass
+
+    def _add_to_recent(self, filepath: str):
+        files = self._load_recent()
+        filepath = os.path.abspath(filepath)
+        if filepath in files:
+            files.remove(filepath)
+        files.insert(0, filepath)
+        files = [f for f in files if os.path.exists(f)][:_MAX_RECENT]
+        self._save_recent(files)
+        self._refresh_recent_menu()
+
+    def _refresh_recent_menu(self):
+        self._recent_menu.clear()
+        files = self._load_recent()
+        if not files:
+            a = QAction('(aucun)', self)
+            a.setEnabled(False)
+            self._recent_menu.addAction(a)
+            return
+        for fp in files:
+            label = os.path.basename(fp)
+            a = QAction(label, self)
+            a.setToolTip(fp)
+            a.triggered.connect(lambda checked=False, p=fp: self._load(p))
+            self._recent_menu.addAction(a)
+        self._recent_menu.addSeparator()
+        clear_a = QAction('Effacer la liste', self)
+        clear_a.triggered.connect(self._clear_recent)
+        self._recent_menu.addAction(clear_a)
+
+    def _clear_recent(self):
+        self._save_recent([])
+        self._refresh_recent_menu()
 
     # ── Sources de tuiles disponibles ────────────────────────────────
     # data.geopf.fr = nouveau portail IGN open data (2023), sans clé API.
