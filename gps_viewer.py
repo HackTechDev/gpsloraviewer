@@ -12,6 +12,7 @@ import os
 import math
 import glob
 import shutil
+from collections import OrderedDict
 from pathlib import Path
 
 import numpy as np
@@ -43,7 +44,7 @@ from PyQt5.QtWidgets import (
     QToolButton, QMenu,
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
 )
-from PyQt5.QtCore import Qt, QSize, QTimer
+from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont
 
 # ── Couleurs ─────────────────────────────────────────────────────────
@@ -140,6 +141,119 @@ def to_webmerc(lat: float, lon: float):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Simplification Douglas-Peucker (itératif, thread-safe)
+# ══════════════════════════════════════════════════════════════════════
+
+def _douglas_peucker_mask(xs: np.ndarray, ys: np.ndarray,
+                          epsilon: float) -> np.ndarray:
+    """Retourne un masque booléen : True = point conservé."""
+    n = len(xs)
+    if n <= 2:
+        return np.ones(n, dtype=bool)
+    mask = np.zeros(n, dtype=bool)
+    mask[0] = mask[-1] = True
+    stack = [(0, n - 1)]
+    while stack:
+        start, end = stack.pop()
+        if end - start <= 1:
+            continue
+        dx = xs[end] - xs[start]
+        dy = ys[end] - ys[start]
+        line_len = math.hypot(dx, dy)
+        if line_len < 1e-10:
+            continue
+        dists = np.abs(
+            (ys[start:end + 1] - ys[start]) * dx
+            - (xs[start:end + 1] - xs[start]) * dy
+        ) / line_len
+        local = int(np.argmax(dists[1:-1]))
+        if dists[1 + local] > epsilon:
+            abs_idx = start + 1 + local
+            mask[abs_idx] = True
+            stack.append((start, abs_idx))
+            stack.append((abs_idx, end))
+    return mask
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Cache LRU en mémoire (N dernières vues de carte)
+# ══════════════════════════════════════════════════════════════════════
+
+class _TileCache:
+    """LRU cache pour les images de tuiles : rend les aller-retours instantanés."""
+
+    def __init__(self, maxsize: int = 20):
+        self._cache: OrderedDict = OrderedDict()
+        self._maxsize = maxsize
+
+    def get(self, key):
+        if key in self._cache:
+            self._cache.move_to_end(key)
+            return self._cache[key]
+        return None
+
+    def put(self, key, value):
+        self._cache[key] = value
+        self._cache.move_to_end(key)
+        while len(self._cache) > self._maxsize:
+            self._cache.popitem(last=False)
+
+    def __len__(self):
+        return len(self._cache)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Thread de chargement asynchrone des tuiles
+# ══════════════════════════════════════════════════════════════════════
+
+class _TileWorker(QThread):
+    """Charge les tuiles OSM en arrière-plan sans bloquer l'interface."""
+    tiles_ready = pyqtSignal(object, object, object)  # img, ext, cache_key
+    failed      = pyqtSignal(str)
+
+    def __init__(self, xl, yl, zoom: int, source, headers: dict, cache_key):
+        super().__init__()
+        self._xl        = xl
+        self._yl        = yl
+        self._zoom      = zoom
+        self._source    = source
+        self._headers   = headers
+        self._cache_key = cache_key
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        if self._cancelled:
+            return
+        try:
+            # Figure sans canvas Qt : opérations purement data, thread-safe.
+            # cx.add_basemap ne déclenche aucun rendu GUI sur ce Figure nu.
+            tmp_fig = Figure()
+            tmp_ax  = tmp_fig.add_axes([0, 0, 1, 1])
+            tmp_ax.set_xlim(self._xl)
+            tmp_ax.set_ylim(self._yl)
+            cx.add_basemap(tmp_ax, crs='EPSG:3857',
+                           source=self._source,
+                           zoom=self._zoom,
+                           attribution_size=0,
+                           headers=self._headers or None)
+            if self._cancelled:
+                return
+            if tmp_ax.images:
+                im  = tmp_ax.images[0]
+                img = np.array(im.get_array())
+                ext = list(im.get_extent())
+                self.tiles_ready.emit(img, ext, self._cache_key)
+            else:
+                self.failed.emit('Aucune tuile retournée')
+        except Exception as exc:
+            if not self._cancelled:
+                self.failed.emit(str(exc))
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Modèle de données
 # ══════════════════════════════════════════════════════════════════════
 
@@ -219,6 +333,17 @@ class MapCanvas(FigureCanvas):
         self._tile_source   = cx.providers.OpenStreetMap.Mapnik
         self._tile_headers  = {}   # headers HTTP pour la source active
 
+        # ── Cache LRU en mémoire ─────────────────────────────────────
+        self._tile_cache  = _TileCache(maxsize=20)
+        self._tile_worker: _TileWorker | None = None
+        self._pending_key = None   # clé de la dernière requête en cours
+
+        # ── Simplification de trace ──────────────────────────────────
+        self._track_line  = None   # artist matplotlib de la trace
+
+        # ── Indicateur de chargement ─────────────────────────────────
+        self._loading_text = None  # text artist, None si axes vidés
+
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
         self._pan_lims = None   # (xlim, ylim) au début du drag
@@ -248,6 +373,8 @@ class MapCanvas(FigureCanvas):
 
     def load(self, gps: GPSData):
         self._gps = gps
+        self._loading_text = None   # les ax.cla() invalident le text artist
+        self._track_line   = None
         self.ax.cla()
         self.ax.set_axis_off()
         self.ax.set_aspect('equal', adjustable='datalim')
@@ -261,17 +388,19 @@ class MapCanvas(FigureCanvas):
         self.ax.set_xlim(xlim)
         self.ax.set_ylim(ylim)
 
-        self._add_tiles()
+        # Trace immédiatement visible ; tuiles chargées en arrière-plan
         self._draw_track()
+        self._request_tiles()
 
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
 
     def _draw_track(self):
         gps = self._gps
-        self.ax.plot(gps.xs, gps.ys, color=C_TRACK,
-                     linewidth=2.5, zorder=5,
-                     solid_capstyle='round', solid_joinstyle='round')
+        xs, ys = self._simplified_track()
+        self._track_line, = self.ax.plot(
+            xs, ys, color=C_TRACK, linewidth=2.5, zorder=5,
+            solid_capstyle='round', solid_joinstyle='round')
         self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
                      color=C_START, markersize=13, zorder=7,
                      markeredgecolor='white', markeredgewidth=2, label='Départ')
@@ -303,18 +432,140 @@ class MapCanvas(FigureCanvas):
         if self._default_lim is not None:
             self._reload_tiles()
 
+    # ── Zoom adaptatif ───────────────────────────────────────────────
+
+    def _compute_zoom(self) -> int:
+        """Calcule le niveau de zoom OSM optimal pour la vue courante."""
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        span_m = max(xl[1] - xl[0], yl[1] - yl[0])
+        if span_m <= 0:
+            return 12
+        # Circonférence équatoriale en Web Mercator ≈ 40 075 016 m ;
+        # +2 pour avoir ~4–8 tuiles visibles selon l'étendue.
+        z = int(math.log2(max(1, 40_075_016 / span_m))) + 2
+        return max(2, min(z, 18))
+
+    def _cache_key(self, zoom: int):
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        r = 500  # grille 500 m : tolère les micro-décalages de pan
+        src = str(self._tile_source)[:100]
+        return (round(xl[0]/r), round(xl[1]/r),
+                round(yl[0]/r), round(yl[1]/r),
+                zoom, src)
+
+    # ── Douglas-Peucker ──────────────────────────────────────────────
+
+    def _dp_epsilon(self) -> float:
+        """Tolérance en mètres équivalente à ~1.5 pixel dans la vue courante."""
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        pos    = self.ax.get_position()
+        fig_sz = self.fig.get_size_inches() * self.fig.dpi
+        ax_w   = pos.width  * fig_sz[0]
+        ax_h   = pos.height * fig_sz[1]
+        if ax_w > 0 and ax_h > 0:
+            return max((xl[1]-xl[0])/ax_w, (yl[1]-yl[0])/ax_h) * 1.5
+        return 1.0
+
+    def _simplified_track(self):
+        """Retourne (xs, ys) avec Douglas-Peucker si la trace > 500 pts."""
+        gps = self._gps
+        if gps is None or gps.count < 500:
+            return gps.xs, gps.ys
+        mask = _douglas_peucker_mask(gps.xs, gps.ys, self._dp_epsilon())
+        return gps.xs[mask], gps.ys[mask]
+
+    def _redraw_track_line(self):
+        """Remplace le polyline de la trace avec la simplification courante."""
+        if self._track_line is not None:
+            self._track_line.remove()
+            self._track_line = None
+        if self._gps is None:
+            return
+        xs, ys = self._simplified_track()
+        self._track_line, = self.ax.plot(
+            xs, ys, color=C_TRACK, linewidth=2.5, zorder=5,
+            solid_capstyle='round', solid_joinstyle='round')
+
+    # ── Chargement asynchrone des tuiles ─────────────────────────────
+
+    def _request_tiles(self):
+        """Lance le chargement des tuiles (cache LRU → thread si miss)."""
+        if self._default_lim is None:
+            return
+        zoom = self._compute_zoom()
+        key  = self._cache_key(zoom)
+
+        # Annule le worker précédent s'il tourne encore
+        if self._tile_worker is not None and self._tile_worker.isRunning():
+            self._tile_worker.cancel()
+
+        cached = self._tile_cache.get(key)
+        if cached is not None:
+            self._apply_tiles(*cached)
+            return
+
+        self._pending_key  = key
+        self._show_loading()
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        self._tile_worker = _TileWorker(
+            xl, yl, zoom, self._tile_source, self._tile_headers, key)
+        self._tile_worker.tiles_ready.connect(self._on_tiles_ready)
+        self._tile_worker.failed.connect(self._on_tiles_failed)
+        self._tile_worker.start()
+
+    def _apply_tiles(self, img, ext):
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        for im in list(self.ax.images):
+            im.remove()
+        self.ax.imshow(img, extent=ext, interpolation='bilinear', zorder=0)
+        self.ax.set_xlim(xl)
+        self.ax.set_ylim(yl)
+        self.draw_idle()
+
+    def _on_tiles_ready(self, img, ext, key):
+        if key != self._pending_key:
+            return
+        self._tile_cache.put(key, (img, ext))
+        self._apply_tiles(img, ext)
+        self._hide_loading()
+
+    def _on_tiles_failed(self, msg: str):
+        self._hide_loading()
+        self.ax.set_facecolor('#d9e8f5')
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        self.ax.text(0.5, 0.02, f'Tuiles indisponibles : {msg}',
+                     transform=self.ax.transAxes, ha='center',
+                     fontsize=8, color='#c00', zorder=20)
+        self.ax.set_xlim(xl)
+        self.ax.set_ylim(yl)
+        self.draw_idle()
+
+    def _show_loading(self):
+        if self._loading_text is None:
+            self._loading_text = self.ax.text(
+                0.5, 0.02, 'Chargement des tuiles…',
+                transform=self.ax.transAxes, ha='center', va='bottom',
+                color='#555', fontsize=9, fontfamily='monospace',
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.75),
+                zorder=20)
+        else:
+            self._loading_text.set_visible(True)
+        self.draw_idle()
+
+    def _hide_loading(self):
+        if self._loading_text is not None:
+            self._loading_text.set_visible(False)
+        self.draw_idle()
+
     # ── Rechargement tuiles après zoom/pan ──────────────────────────
 
     def _reload_tiles(self):
         if self._default_lim is None:
             return
-        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
-        for img in list(self.ax.images):
-            img.remove()
-        self._add_tiles()
-        self.ax.set_xlim(xl)   # contextily peut légèrement modifier les limites
-        self.ax.set_ylim(yl)
-        self.draw()
+        # Met à jour la simplification Douglas-Peucker si la trace est grande
+        if self._gps is not None and self._gps.count >= 500:
+            self._redraw_track_line()
+        self._request_tiles()
 
     # ── Zoom à la molette ────────────────────────────────────────────
 
@@ -386,9 +637,11 @@ class MapCanvas(FigureCanvas):
         xlim = (cx_m - half, cx_m + half)
         ylim = (cy_m - half, cy_m + half)
 
-        self._gps         = None
-        self._cursor_dot  = None
-        self._default_lim = (xlim, ylim)
+        self._gps          = None
+        self._cursor_dot   = None
+        self._loading_text = None
+        self._track_line   = None
+        self._default_lim  = (xlim, ylim)
 
         self.ax.cla()
         self.ax.set_axis_off()
@@ -396,13 +649,12 @@ class MapCanvas(FigureCanvas):
         self.ax.set_xlim(xlim)
         self.ax.set_ylim(ylim)
 
-        self._add_tiles()
-
         self.ax.plot(cx_m, cy_m, 'v', color='#e74c3c', markersize=22,
                      zorder=10, markeredgecolor='white', markeredgewidth=2)
         self.ax.plot(cx_m, cy_m, 'o', color='#e74c3c', markersize=7,
                      zorder=11, markeredgecolor='white', markeredgewidth=1.5)
 
+        self._request_tiles()
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
 
@@ -914,10 +1166,6 @@ class MainWindow(QMainWindow):
             return
 
         self._gps = GPSData(points, filepath)
-
-        self._sb.showMessage('Chargement des tuiles OpenStreetMap …')
-        QApplication.processEvents()
-
         self._map.load(self._gps)
         self._chart_alt.load(self._gps.distances, self._gps.alts,  'Altitude (m)')
         self._chart_spd.load(self._gps.distances, self._gps.speeds,'Vitesse (km/h)')
