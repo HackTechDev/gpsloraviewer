@@ -51,9 +51,10 @@ from PyQt5.QtWidgets import (
     QFrame, QToolBar, QSizePolicy,
     QToolButton, QMenu, QProgressBar,
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
+    QScrollArea, QPushButton,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QFont
+from PyQt5.QtGui import QFont, QPixmap
 
 # ── Couleurs ─────────────────────────────────────────────────────────
 C_TRACK   = '#1a6fbf'
@@ -354,6 +355,7 @@ class MapCanvas(FigureCanvas):
     measure_mode_cancelled = pyqtSignal()       # Échap appuyé en mode mesure
     photo_requested        = pyqtSignal(float, float)  # x_m, y_m Web Mercator
     photo_mode_changed     = pyqtSignal(bool)   # basculement mode photo
+    photo_clicked          = pyqtSignal(int)    # index dans _photo_data
 
     def __init__(self):
         self.fig = Figure(facecolor='#2b2b2b')
@@ -901,6 +903,11 @@ class MapCanvas(FigureCanvas):
                     self._meas_timer.start()
             return
         if event.button == 1 and event.inaxes == self.ax and self._default_lim is not None:
+            # Clic sur une annotation photo → ouvre la visionneuse
+            idx = self._find_photo_at(event)
+            if idx is not None:
+                self.photo_clicked.emit(idx)
+                return
             self._pan_xy   = (event.x, event.y)
             self._pan_lims = (self.ax.get_xlim(), self.ax.get_ylim())
             self.setCursor(Qt.ClosedHandCursor)
@@ -1178,6 +1185,7 @@ class MapCanvas(FigureCanvas):
         cross, = self.ax.plot(
             x_m, y_m, '+', color='#e74c3c',
             markersize=16, markeredgewidth=2.5, zorder=12)
+        cross.pickradius = 12   # zone de clic élargie pour la croix
         artists.append(cross)
         try:
             img_arr  = np.array(PilImage.open(thumb_path).convert('RGB'))
@@ -1206,6 +1214,18 @@ class MapCanvas(FigureCanvas):
             artists = self._draw_photo_annotation(
                 entry['x_m'], entry['y_m'], entry['thumb_path'])
             self._photo_artists.append(artists)
+
+    def _find_photo_at(self, event) -> 'int | None':
+        """Retourne l'index de l'annotation photo sous le clic, ou None."""
+        for i, artists in enumerate(self._photo_artists):
+            for art in artists:
+                try:
+                    hit, _ = art.contains(event)
+                    if hit:
+                        return i
+                except Exception:
+                    pass
+        return None
 
     def _on_key(self, event):
         if event.key == 'escape':
@@ -1532,6 +1552,66 @@ class CoordDialog(QDialog):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Visionneuse photo plein format
+# ══════════════════════════════════════════════════════════════════════
+
+class PhotoViewDialog(QDialog):
+    """Affiche la photo originale en plein format dans une fenêtre dédiée."""
+
+    def __init__(self, image_path: str, lat: float, lon: float, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(Path(image_path).name)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self._build(image_path, lat, lon)
+
+    def _build(self, image_path: str, lat: float, lon: float):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        pixmap = QPixmap(image_path)
+        if pixmap.isNull():
+            layout.addWidget(QLabel(f'Impossible de charger l\'image :\n{image_path}'))
+        else:
+            # Taille max = 90 % de l'écran disponible
+            screen = QApplication.primaryScreen().availableGeometry()
+            max_w  = int(screen.width()  * 0.9)
+            max_h  = int(screen.height() * 0.85)
+            scaled = pixmap.scaled(max_w, max_h,
+                                   Qt.KeepAspectRatio,
+                                   Qt.SmoothTransformation)
+            lbl_img = QLabel()
+            lbl_img.setPixmap(scaled)
+            lbl_img.setAlignment(Qt.AlignCenter)
+
+            if scaled.width() > 1200 or scaled.height() > 900:
+                scroll = QScrollArea()
+                scroll.setWidget(lbl_img)
+                scroll.setWidgetResizable(False)
+                scroll.setAlignment(Qt.AlignCenter)
+                layout.addWidget(scroll)
+            else:
+                layout.addWidget(lbl_img)
+
+        # Coordonnées + chemin
+        info = QLabel(
+            f'<span style="color:#555;">'
+            f'{lat:.6f}° N &nbsp; {lon:.6f}° E'
+            f'</span>'
+            f'<br><span style="color:#aaa; font-size:10px;">{image_path}</span>')
+        info.setTextFormat(Qt.RichText)
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        btn = QPushButton('Fermer')
+        btn.setFixedWidth(100)
+        btn.clicked.connect(self.accept)
+        layout.addWidget(btn, 0, Qt.AlignRight)
+
+        self.adjustSize()
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Fenêtre principale
 # ══════════════════════════════════════════════════════════════════════
 
@@ -1697,6 +1777,7 @@ class MainWindow(QMainWindow):
         self._act_meas.toggled.connect(self._map.set_measure_mode)
         self._map.photo_requested.connect(self._on_photo_requested)
         self._map.photo_mode_changed.connect(self._act_photo.setChecked)
+        self._map.photo_clicked.connect(self._on_photo_clicked)
         self._act_photo.toggled.connect(self._map.set_photo_mode)
 
     def _build_menus(self):
@@ -1973,6 +2054,19 @@ class MainWindow(QMainWindow):
             self._sb.showMessage('Cache de tuiles vidé.')
 
     # ── Annotations photo ─────────────────────────────────────────────
+
+    def _on_photo_clicked(self, index: int):
+        """Ouvre la photo en plein format dans une fenêtre dédiée."""
+        if index >= len(self._map._photo_data):
+            return
+        entry = self._map._photo_data[index]
+        orig  = entry['orig_path']
+        if not Path(orig).exists():
+            QMessageBox.warning(self, 'Fichier introuvable',
+                                f'La photo originale est introuvable :\n{orig}')
+            return
+        dlg = PhotoViewDialog(orig, entry['lat'], entry['lon'], self)
+        dlg.exec_()
 
     def _on_photo_requested(self, x_m: float, y_m: float):
         """Clic en mode photo : ouvre le sélecteur, copie et affiche la photo."""
