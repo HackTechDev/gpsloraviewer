@@ -1,1 +1,4 @@
 __pycache__/
+tracks/
+tracks/images/
+tracks/track.json
