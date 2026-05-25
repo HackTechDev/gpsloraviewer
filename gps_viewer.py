@@ -304,7 +304,7 @@ class MapCanvas(FigureCanvas):
     # ── Zoom à la molette ────────────────────────────────────────────
 
     def _on_scroll(self, event):
-        if event.inaxes != self.ax or self._gps is None:
+        if event.inaxes != self.ax or self._default_lim is None:
             return
         factor = 0.65 if event.button == 'up' else 1.55
         xc, yc = event.xdata, event.ydata
@@ -321,13 +321,13 @@ class MapCanvas(FigureCanvas):
     # ── Pan (clic gauche + glisser) ──────────────────────────────────
 
     def _on_press(self, event):
-        if event.button == 1 and event.inaxes == self.ax and self._gps is not None:
+        if event.button == 1 and event.inaxes == self.ax and self._default_lim is not None:
             self._pan_xy   = (event.x, event.y)
             self._pan_lims = (self.ax.get_xlim(), self.ax.get_ylim())
             self.setCursor(Qt.ClosedHandCursor)
 
     def _on_motion(self, event):
-        if self._pan_xy is None or self._gps is None:
+        if self._pan_xy is None or self._default_lim is None:
             return
         dpx = event.x - self._pan_xy[0]
         dpy = event.y - self._pan_xy[1]
