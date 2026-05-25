@@ -13,12 +13,17 @@ import math
 import glob
 import shutil
 import json
+import datetime
 from collections import OrderedDict
 from pathlib import Path
+
+from PIL import Image as PilImage
+from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 import numpy as np
 import matplotlib
 matplotlib.use('Qt5Agg')
+matplotlib.rcParams['keymap.pan'] = []   # libère 'p' pour le mode annotation photo
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
@@ -63,6 +68,10 @@ WEB_MERC_R = 6_378_137.0
 _CONFIG_DIR  = Path.home() / '.config' / 'gps_viewer'
 _RECENT_FILE = _CONFIG_DIR / 'recent.json'
 _MAX_RECENT  = 10
+
+_TRACKS_DIR     = Path('tracks')
+_TRACKS_IMG_DIR = _TRACKS_DIR / 'images'
+_TRACKS_JSON    = _TRACKS_DIR / 'track.json'
 
 # ── Colormaps pour les modes de trace ────────────────────────────────
 _CMAP_ALT = mcolors.LinearSegmentedColormap.from_list(
@@ -343,6 +352,8 @@ class MapCanvas(FigureCanvas):
     tile_loading           = pyqtSignal(bool)   # True = début, False = fin
     measure_updated        = pyqtSignal(str)    # message status bar
     measure_mode_cancelled = pyqtSignal()       # Échap appuyé en mode mesure
+    photo_requested        = pyqtSignal(float, float)  # x_m, y_m Web Mercator
+    photo_mode_changed     = pyqtSignal(bool)   # basculement mode photo
 
     def __init__(self):
         self.fig = Figure(facecolor='#2b2b2b')
@@ -390,6 +401,11 @@ class MapCanvas(FigureCanvas):
         # distinguer un simple clic d'un double-clic.
         self._meas_timer = QTimer(self, singleShot=True, interval=200)
         self._meas_timer.timeout.connect(self._meas_commit_pending)
+
+        # ── Mode annotation photo ────────────────────────────────────
+        self._photo_mode    = False
+        self._photo_data    = []   # [{x_m,y_m,lat,lon,orig_path,thumb_path}, …]
+        self._photo_artists = []   # artistes par annotation (parallèle à _photo_data)
 
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
@@ -447,6 +463,7 @@ class MapCanvas(FigureCanvas):
 
         # Trace immédiatement visible ; tuiles chargées en arrière-plan
         self._draw_track()
+        self._redraw_photos()
         self._request_tiles()
 
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -865,6 +882,12 @@ class MapCanvas(FigureCanvas):
     # ── Pan (clic gauche + glisser) ──────────────────────────────────
 
     def _on_press(self, event):
+        if self._photo_mode:
+            if (event.button == 1 and event.inaxes == self.ax
+                    and event.xdata is not None
+                    and not getattr(event, 'dblclick', False)):
+                self.photo_requested.emit(event.xdata, event.ydata)
+            return
         if self._measure_mode:
             if event.button == 1 and event.inaxes == self.ax and event.xdata is not None:
                 if getattr(event, 'dblclick', False):
@@ -959,6 +982,7 @@ class MapCanvas(FigureCanvas):
         self.ax.plot(cx_m, cy_m, 'o', color='#e74c3c', markersize=7,
                      zorder=11, markeredgecolor='white', markeredgewidth=1.5)
 
+        self._redraw_photos()
         self._request_tiles()
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
@@ -1118,9 +1142,79 @@ class MapCanvas(FigureCanvas):
                       alpha=0.78, edgecolor='none'))
         self.draw_idle()
 
+    # ── Mode annotation photo ────────────────────────────────────────
+
+    def set_photo_mode(self, active: bool):
+        self._photo_mode = active
+        if active:
+            self.setCursor(Qt.CrossCursor)
+        elif not self._measure_mode:
+            self.setCursor(Qt.OpenHandCursor)
+
+    def load_photo_data(self, entries: list):
+        """Charge des annotations photo sauvegardées sans les dessiner."""
+        self._photo_data    = entries
+        self._photo_artists = []
+
+    def add_photo_annotation(self, x_m: float, y_m: float,
+                              lat: float, lon: float,
+                              orig_path: str, thumb_path: str):
+        """Ajoute une annotation photo à la carte et la mémorise."""
+        entry = {
+            'x_m': x_m, 'y_m': y_m,
+            'lat': lat,  'lon': lon,
+            'orig_path': orig_path,
+            'thumb_path': thumb_path,
+        }
+        self._photo_data.append(entry)
+        artists = self._draw_photo_annotation(x_m, y_m, thumb_path)
+        self._photo_artists.append(artists)
+        self.draw_idle()
+
+    def _draw_photo_annotation(self, x_m: float, y_m: float,
+                                thumb_path: str) -> list:
+        """Dessine la croix et la miniature ; retourne la liste d'artistes."""
+        artists = []
+        cross, = self.ax.plot(
+            x_m, y_m, '+', color='#e74c3c',
+            markersize=16, markeredgewidth=2.5, zorder=12)
+        artists.append(cross)
+        try:
+            img_arr  = np.array(PilImage.open(thumb_path).convert('RGB'))
+            imgbox   = OffsetImage(img_arr, zoom=0.8)
+            ab = AnnotationBbox(
+                imgbox, (x_m, y_m),
+                xycoords='data',
+                xybox=(0, 55),
+                boxcoords='offset points',
+                frameon=True,
+                pad=0.3,
+                arrowprops=dict(arrowstyle='->', color='#e74c3c', lw=1.5),
+                bboxprops=dict(edgecolor='#e74c3c', linewidth=1.5,
+                               facecolor='white', alpha=0.92),
+                zorder=13)
+            self.ax.add_artist(ab)
+            artists.append(ab)
+        except Exception:
+            pass
+        return artists
+
+    def _redraw_photos(self):
+        """Redessine toutes les annotations photo après un ax.cla()."""
+        self._photo_artists = []
+        for entry in self._photo_data:
+            artists = self._draw_photo_annotation(
+                entry['x_m'], entry['y_m'], entry['thumb_path'])
+            self._photo_artists.append(artists)
+
     def _on_key(self, event):
-        if event.key == 'escape' and self._measure_mode:
-            self.measure_mode_cancelled.emit()
+        if event.key == 'escape':
+            if self._measure_mode:
+                self.measure_mode_cancelled.emit()
+            elif self._photo_mode:
+                self.photo_mode_changed.emit(False)
+        elif event.key == 'p':
+            self.photo_mode_changed.emit(not self._photo_mode)
 
     @staticmethod
     def _meas_dist_m(x0: float, y0: float, x1: float, y1: float) -> float:
@@ -1450,6 +1544,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_menus()
         self.setAcceptDrops(True)
+        self._load_track_json()
 
     # ── Interface ────────────────────────────────────────────────────
 
@@ -1515,6 +1610,13 @@ class MainWindow(QMainWindow):
         self._act_meas.setToolTip(
             'Mesure de distance clic-à-clic (Ctrl+D)  •  Échap pour annuler')
         tb.addAction(self._act_meas)
+
+        # ── Annotation photo ─────────────────────────────────────────
+        self._act_photo = QAction('📷  Photo', self)
+        self._act_photo.setCheckable(True)
+        self._act_photo.setToolTip(
+            'Annoter la carte avec une photo (P)  •  Clic pour choisir la position')
+        tb.addAction(self._act_photo)
 
         # ── Grille / miniature ───────────────────────────────────────
         act_grid = QAction('⊞  Grille', self)
@@ -1593,6 +1695,9 @@ class MainWindow(QMainWindow):
         self._map.measure_mode_cancelled.connect(
             lambda: self._act_meas.setChecked(False))
         self._act_meas.toggled.connect(self._map.set_measure_mode)
+        self._map.photo_requested.connect(self._on_photo_requested)
+        self._map.photo_mode_changed.connect(self._act_photo.setChecked)
+        self._act_photo.toggled.connect(self._map.set_photo_mode)
 
     def _build_menus(self):
         mb = self.menuBar()
@@ -1866,6 +1971,85 @@ class MainWindow(QMainWindow):
             _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
             cx.set_cache_dir(str(_TILE_CACHE_DIR))
             self._sb.showMessage('Cache de tuiles vidé.')
+
+    # ── Annotations photo ─────────────────────────────────────────────
+
+    def _on_photo_requested(self, x_m: float, y_m: float):
+        """Clic en mode photo : ouvre le sélecteur, copie et affiche la photo."""
+        lat, lon = _webmerc_to_latlon(x_m, y_m)
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Choisir une photo', os.getcwd(),
+            'Images (*.jpg *.jpeg *.png *.bmp *.gif *.tiff *.webp)'
+            ';;Tous les fichiers (*)')
+        if not path:
+            return
+        try:
+            orig_path, thumb_path = self._save_photo(path)
+        except Exception as exc:
+            QMessageBox.critical(self, 'Erreur photo',
+                                 f'Impossible de traiter la photo :\n{exc}')
+            return
+        self._map.add_photo_annotation(
+            x_m, y_m, lat, lon, str(orig_path), str(thumb_path))
+        self._save_track_json()
+        self._sb.showMessage(
+            f'Photo ajoutée : {Path(orig_path).name}'
+            f'  •  {lat:.6f}° N  {lon:.6f}° E')
+
+    def _save_photo(self, src_path: str):
+        """Copie l'original et crée la miniature dans tracks/images/."""
+        _TRACKS_IMG_DIR.mkdir(parents=True, exist_ok=True)
+        ts  = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        ext = Path(src_path).suffix.lower() or '.jpg'
+        i   = 1
+        while (_TRACKS_IMG_DIR / f'photo_{ts}_{i:03d}{ext}').exists():
+            i += 1
+        orig_dest  = _TRACKS_IMG_DIR / f'photo_{ts}_{i:03d}{ext}'
+        thumb_dest = _TRACKS_IMG_DIR / f'photo_{ts}_{i:03d}_thumb.jpg'
+        shutil.copy2(src_path, orig_dest)
+        img = PilImage.open(src_path).convert('RGB')
+        img.thumbnail((80, 80), PilImage.LANCZOS)
+        img.save(thumb_dest, 'JPEG', quality=85)
+        return orig_dest, thumb_dest
+
+    def _save_track_json(self):
+        """Sauvegarde toutes les positions photo dans tracks/track.json."""
+        _TRACKS_DIR.mkdir(parents=True, exist_ok=True)
+        photos = [
+            {
+                'lat':   round(e['lat'], 8),
+                'lon':   round(e['lon'], 8),
+                'file':  e['orig_path'],
+                'thumb': e['thumb_path'],
+            }
+            for e in self._map._photo_data
+        ]
+        _TRACKS_JSON.write_text(
+            json.dumps({'photos': photos}, ensure_ascii=False, indent=2),
+            encoding='utf-8')
+
+    def _load_track_json(self):
+        """Charge les annotations photo sauvegardées (dessinées au prochain load)."""
+        if not _TRACKS_JSON.exists():
+            return
+        try:
+            data    = json.loads(_TRACKS_JSON.read_text(encoding='utf-8'))
+            entries = []
+            for item in data.get('photos', []):
+                lat, lon  = item['lat'], item['lon']
+                x_m, y_m  = to_webmerc(lat, lon)
+                thumb     = item.get('thumb', '')
+                orig      = item.get('file', '')
+                if thumb and Path(thumb).exists():
+                    entries.append({
+                        'x_m': x_m,  'y_m': y_m,
+                        'lat': lat,  'lon': lon,
+                        'orig_path':  orig,
+                        'thumb_path': thumb,
+                    })
+            self._map.load_photo_data(entries)
+        except Exception:
+            pass
 
     def _about(self):
         QMessageBox.about(self, 'À propos — GPS Viewer',
