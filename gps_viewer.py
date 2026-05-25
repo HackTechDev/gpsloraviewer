@@ -356,6 +356,7 @@ class MapCanvas(FigureCanvas):
     photo_requested        = pyqtSignal(float, float)  # x_m, y_m Web Mercator
     photo_mode_changed     = pyqtSignal(bool)   # basculement mode photo
     photo_clicked          = pyqtSignal(int)    # index dans _photo_data
+    photo_eye_changed      = pyqtSignal(int)    # angle œil modifié → sauvegarder
 
     def __init__(self):
         self.fig = Figure(facecolor='#2b2b2b')
@@ -405,9 +406,10 @@ class MapCanvas(FigureCanvas):
         self._meas_timer.timeout.connect(self._meas_commit_pending)
 
         # ── Mode annotation photo ────────────────────────────────────
-        self._photo_mode    = False
-        self._photo_data    = []   # [{x_m,y_m,lat,lon,orig_path,thumb_path}, …]
-        self._photo_artists = []   # artistes par annotation (parallèle à _photo_data)
+        self._photo_mode        = False
+        self._photo_data        = []   # [{x_m,y_m,lat,lon,orig_path,thumb_path,angle}, …]
+        self._photo_artists     = []   # artistes par annotation (parallèle à _photo_data)
+        self._hovered_photo_idx = None # index de l'annotation sous le curseur
 
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
@@ -859,9 +861,12 @@ class MapCanvas(FigureCanvas):
     def _reload_tiles(self):
         if self._default_lim is None:
             return
-        # Met à jour la simplification Douglas-Peucker si la trace est grande
         if self._gps is not None and self._gps.count >= 500:
             self._redraw_track_line()
+        # Redessine les yeux (rayon dépend de la vue courante)
+        for i, entry in enumerate(self._photo_data):
+            if entry.get('angle') is not None:
+                self._draw_eye(i)
         self._request_tiles()
 
     # ── Zoom à la molette ────────────────────────────────────────────
@@ -917,6 +922,12 @@ class MapCanvas(FigureCanvas):
             if self._meas_pts and event.inaxes == self.ax and event.xdata is not None:
                 self._meas_update_rubber(event.xdata, event.ydata)
             return
+        # Suivi de l'annotation survolée (pour v/w/x)
+        if not self._photo_mode and event.x is not None:
+            if event.inaxes == self.ax:
+                self._hovered_photo_idx = self._find_photo_at(event)
+            else:
+                self._hovered_photo_idx = None
         if self._pan_xy is None or self._default_lim is None:
             return
         dpx = event.x - self._pan_xy[0]
@@ -1210,10 +1221,85 @@ class MapCanvas(FigureCanvas):
     def _redraw_photos(self):
         """Redessine toutes les annotations photo après un ax.cla()."""
         self._photo_artists = []
-        for entry in self._photo_data:
+        for i, entry in enumerate(self._photo_data):
             artists = self._draw_photo_annotation(
                 entry['x_m'], entry['y_m'], entry['thumb_path'])
             self._photo_artists.append(artists)
+            if entry.get('angle') is not None:
+                self._draw_eye(i)
+
+    def _eye_radius(self) -> float:
+        """Rayon du cercle-œil en unités données : 3.5 % de la largeur de vue."""
+        xl = self.ax.get_xlim()
+        return (xl[1] - xl[0]) * 0.035
+
+    def _draw_eye(self, idx: int):
+        """Dessine (ou redessine) l'indicateur de direction pour la photo idx."""
+        from matplotlib.patches import Circle as MplCircle
+        # Supprime les artistes-œil existants (indices ≥ 2)
+        if idx < len(self._photo_artists):
+            for art in self._photo_artists[idx][2:]:
+                try:
+                    art.remove()
+                except Exception:
+                    pass
+            self._photo_artists[idx] = self._photo_artists[idx][:2]
+
+        entry = self._photo_data[idx]
+        angle = entry.get('angle')
+        if angle is None:
+            return
+
+        x_m, y_m   = entry['x_m'], entry['y_m']
+        R           = self._eye_radius()
+        theta       = math.radians(angle)
+        eye_artists = []
+
+        # ── Anneau extérieur ─────────────────────────────────────────
+        ring = MplCircle((x_m, y_m), R,
+                         fill=False, edgecolor='#3498db',
+                         linewidth=1.6, linestyle='--', zorder=11,
+                         transform=self.ax.transData)
+        self.ax.add_patch(ring)
+        eye_artists.append(ring)
+
+        # ── Position de l'œil sur l'anneau ───────────────────────────
+        ex, ey = x_m + R * math.cos(theta), y_m + R * math.sin(theta)
+        r_eye  = R * 0.22
+
+        # Blanc de l'œil
+        sclera = MplCircle((ex, ey), r_eye,
+                           facecolor='white', edgecolor='#2c3e50',
+                           linewidth=1.4, zorder=12,
+                           transform=self.ax.transData)
+        self.ax.add_patch(sclera)
+        eye_artists.append(sclera)
+
+        # Pupille (décalée vers la croix)
+        dist = math.hypot(x_m - ex, y_m - ey)
+        if dist > 0:
+            px = ex + (x_m - ex) / dist * r_eye * 0.42
+            py = ey + (y_m - ey) / dist * r_eye * 0.42
+        else:
+            px, py = ex, ey
+        pupil = MplCircle((px, py), r_eye * 0.44,
+                          facecolor='#1a252f', edgecolor='none',
+                          zorder=13,
+                          transform=self.ax.transData)
+        self.ax.add_patch(pupil)
+        eye_artists.append(pupil)
+
+        # Reflet (petit cercle blanc dans la pupille)
+        reflet = MplCircle((px + r_eye * 0.14, py + r_eye * 0.14),
+                            r_eye * 0.13,
+                            facecolor='white', edgecolor='none',
+                            zorder=14,
+                            transform=self.ax.transData)
+        self.ax.add_patch(reflet)
+        eye_artists.append(reflet)
+
+        if idx < len(self._photo_artists):
+            self._photo_artists[idx].extend(eye_artists)
 
     def _find_photo_at(self, event) -> 'int | None':
         """Retourne l'index de l'annotation photo sous le clic, ou None."""
@@ -1235,6 +1321,32 @@ class MapCanvas(FigureCanvas):
                 self.photo_mode_changed.emit(False)
         elif event.key == 'p':
             self.photo_mode_changed.emit(not self._photo_mode)
+        elif event.key in ('v', 'w', 'x'):
+            self._handle_eye_key(event.key)
+
+    def _handle_eye_key(self, key: str):
+        idx = self._hovered_photo_idx
+        if idx is None or idx >= len(self._photo_data):
+            return
+        entry = self._photo_data[idx]
+        if key == 'v':
+            if entry.get('angle') is None:
+                entry['angle'] = 90.0   # 12 h : l'œil regarde vers le bas
+            else:
+                entry['angle'] = None   # masque l'œil
+        elif key == 'w':
+            if entry.get('angle') is not None:
+                entry['angle'] = (entry['angle'] + 15) % 360
+            else:
+                return
+        elif key == 'x':
+            if entry.get('angle') is not None:
+                entry['angle'] = (entry['angle'] - 15) % 360
+            else:
+                return
+        self._draw_eye(idx)
+        self.draw_idle()
+        self.photo_eye_changed.emit(idx)
 
     @staticmethod
     def _meas_dist_m(x0: float, y0: float, x1: float, y1: float) -> float:
@@ -1823,6 +1935,8 @@ class MainWindow(QMainWindow):
         self._map.photo_requested.connect(self._on_photo_requested)
         self._map.photo_mode_changed.connect(self._act_photo.setChecked)
         self._map.photo_clicked.connect(self._on_photo_clicked)
+        self._map.photo_eye_changed.connect(
+            lambda _: self._save_track_json())
         self._act_photo.toggled.connect(self._map.set_photo_mode)
 
     def _build_menus(self):
@@ -2207,6 +2321,7 @@ class MainWindow(QMainWindow):
                 'thumb':       e['thumb_path'],
                 'titre':       e.get('titre', ''),
                 'description': e.get('description', ''),
+                'angle':       e.get('angle'),   # None si pas d'œil
             }
             for e in self._map._photo_data
         ]
@@ -2234,8 +2349,9 @@ class MainWindow(QMainWindow):
                         'lon':        lon,
                         'orig_path':  orig,
                         'thumb_path': thumb,
-                        'titre':      item.get('titre', ''),
+                        'titre':       item.get('titre', ''),
                         'description': item.get('description', ''),
+                        'angle':       item.get('angle'),
                     })
             self._map.load_photo_data(entries)
         except Exception:
