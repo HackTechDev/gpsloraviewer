@@ -25,6 +25,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout, QHBoxLayout, QLabel, QAction,
     QFileDialog, QStatusBar, QMessageBox,
     QFrame, QToolBar, QSizePolicy,
+    QToolButton, QMenu,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QFont
@@ -615,11 +616,18 @@ class MainWindow(QMainWindow):
         act_home.triggered.connect(lambda: self._map.reset_view())
         tb.addAction(act_home)
 
-        self._act_tiles = QAction('🛰  Satellite', self)
-        self._act_tiles.setToolTip('Basculer vers la vue satellite (Ctrl+T)')
-        self._act_tiles.setShortcut('Ctrl+T')
-        self._act_tiles.triggered.connect(self._toggle_tiles)
-        tb.addAction(self._act_tiles)
+        self._btn_tiles = QToolButton()
+        self._btn_tiles.setText('🗺  Fond de carte')
+        self._btn_tiles.setToolTip('Changer le fond de carte (Ctrl+T)')
+        self._btn_tiles.setPopupMode(QToolButton.InstantPopup)
+        self._btn_tiles.setShortcut('Ctrl+T')
+        menu_tiles = QMenu(self._btn_tiles)
+        for key, info in self._TILE_SOURCES.items():
+            act = QAction(info['label'], self)
+            act.triggered.connect(lambda checked=False, k=key: self._select_tiles(k))
+            menu_tiles.addAction(act)
+        self._btn_tiles.setMenu(menu_tiles)
+        tb.addWidget(self._btn_tiles)
 
         tb.addSeparator()
 
@@ -768,23 +776,41 @@ class MainWindow(QMainWindow):
         if self._gps:
             self._stats.update_cursor(self._gps, index)
 
-    # ── Bascule carte / satellite ─────────────────────────────────────
+    # ── Sources de tuiles disponibles ────────────────────────────────
 
-    _PROVIDERS = {
-        'osm': (cx.providers.OpenStreetMap.Mapnik,
-                '🛰  Satellite', 'Basculer vers la vue satellite (Ctrl+T)'),
-        'sat': (cx.providers.Esri.WorldImagery,
-                '🗺  Carte',     'Basculer vers la carte standard (Ctrl+T)'),
+    _IGN_BASE = (
+        'https://wxs.ign.fr/essentiels/geoportail/wmts'
+        '?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
+        '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
+        '&STYLE=normal'
+    )
+    _TILE_SOURCES = {
+        'osm': {
+            'source': cx.providers.OpenStreetMap.Mapnik,
+            'label':  '🗺  OpenStreetMap',
+            'short':  'OSM',
+        },
+        'esri': {
+            'source': cx.providers.Esri.WorldImagery,
+            'label':  '🛰  Satellite (Esri)',
+            'short':  'Satellite Esri',
+        },
+        'ign_ortho': {
+            'source': _IGN_BASE + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&FORMAT=image/jpeg',
+            'label':  '🛰  Orthophoto IGN',
+            'short':  'Orthophoto IGN',
+        },
+        'ign_plan': {
+            'source': _IGN_BASE + '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&FORMAT=image/png',
+            'label':  '🗾  Plan IGN',
+            'short':  'Plan IGN',
+        },
     }
 
-    def _toggle_tiles(self):
-        current = self._map._tile_source
-        osm_src = self._PROVIDERS['osm'][0]
-        key = 'sat' if current == osm_src else 'osm'
-        src, label, tip = self._PROVIDERS[key]
-        self._map.set_tile_source(src)
-        self._act_tiles.setText(label)
-        self._act_tiles.setToolTip(tip)
+    def _select_tiles(self, key: str):
+        info = self._TILE_SOURCES[key]
+        self._map.set_tile_source(info['source'])
+        self._btn_tiles.setText(f"🗺  {info['short']}")
 
     # ── À propos ─────────────────────────────────────────────────────
 
