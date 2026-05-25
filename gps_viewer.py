@@ -23,7 +23,8 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 import numpy as np
 import matplotlib
 matplotlib.use('Qt5Agg')
-matplotlib.rcParams['keymap.pan'] = []   # libère 'p' pour le mode annotation photo
+matplotlib.rcParams['keymap.pan']     = []   # libère 'p' pour le mode annotation photo
+matplotlib.rcParams['keymap.forward'] = []   # libère 'v' pour l'indicateur œil
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.collections import LineCollection
@@ -922,6 +923,9 @@ class MapCanvas(FigureCanvas):
             if self._meas_pts and event.inaxes == self.ax and event.xdata is not None:
                 self._meas_update_rubber(event.xdata, event.ydata)
             return
+        # Focus clavier automatique dès que la souris est sur la carte
+        if event.inaxes == self.ax:
+            self.setFocus()
         # Suivi de l'annotation survolée (pour v/w/x)
         if not self._photo_mode and event.x is not None:
             if event.inaxes == self.ax:
@@ -1301,16 +1305,17 @@ class MapCanvas(FigureCanvas):
         if idx < len(self._photo_artists):
             self._photo_artists[idx].extend(eye_artists)
 
-    def _find_photo_at(self, event) -> 'int | None':
-        """Retourne l'index de l'annotation photo sous le clic, ou None."""
-        for i, artists in enumerate(self._photo_artists):
-            for art in artists:
-                try:
-                    hit, _ = art.contains(event)
-                    if hit:
-                        return i
-                except Exception:
-                    pass
+    def _find_photo_at(self, event, radius_px: int = 48) -> 'int | None':
+        """Retourne l'index de la photo dont la croix est à ≤ radius_px pixels du curseur."""
+        if not self._photo_data or event.x is None or event.y is None:
+            return None
+        for i, entry in enumerate(self._photo_data):
+            try:
+                dp = self.ax.transData.transform((entry['x_m'], entry['y_m']))
+                if math.hypot(event.x - dp[0], event.y - dp[1]) <= radius_px:
+                    return i
+            except Exception:
+                pass
         return None
 
     def _on_key(self, event):
