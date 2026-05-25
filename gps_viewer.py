@@ -1462,7 +1462,6 @@ class MainWindow(QMainWindow):
         self._act_meas.setShortcut('Ctrl+D')
         self._act_meas.setToolTip(
             'Mesure de distance clic-à-clic (Ctrl+D)  •  Échap pour annuler')
-        self._act_meas.toggled.connect(self._map.set_measure_mode)
         tb.addAction(self._act_meas)
 
         # ── Grille / miniature ───────────────────────────────────────
@@ -1492,6 +1491,7 @@ class MainWindow(QMainWindow):
         self._map.measure_updated.connect(self._sb.showMessage)
         self._map.measure_mode_cancelled.connect(
             lambda: self._act_meas.setChecked(False))
+        self._act_meas.toggled.connect(self._map.set_measure_mode)
         self._chart_alt = ChartCanvas('Profil altimétrique', C_ALT, self._on_hover)
         self._chart_spd = ChartCanvas('Vitesse (km/h)',       C_SPD, self._on_hover)
         self._stats     = StatsPanel()
