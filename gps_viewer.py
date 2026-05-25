@@ -1305,6 +1305,17 @@ class MapCanvas(FigureCanvas):
         if idx < len(self._photo_artists):
             self._photo_artists[idx].extend(eye_artists)
 
+    def reload_photo_annotations(self):
+        """Supprime les artistes photo existants puis redessine depuis _photo_data."""
+        for artists in self._photo_artists:
+            for art in artists:
+                try:
+                    art.remove()
+                except Exception:
+                    pass
+        self._redraw_photos()
+        self.draw_idle()
+
     def _find_photo_at(self, event, radius_px: int = 48,
                        check_thumbnail: bool = False) -> 'int | None':
         """Retourne l'index de la photo sous le curseur.
@@ -1818,9 +1829,9 @@ class MainWindow(QMainWindow):
                          'background: #f0f0f0; border-bottom: 1px solid #ccc; }')
         self.addToolBar(tb)
 
-        act_open = QAction('📂  Ouvrir', self)
+        act_open = QAction('📂  Trace GPS', self)
         act_open.setShortcut('Ctrl+O')
-        act_open.setToolTip('Ouvrir un fichier GPS NMEA (Ctrl+O)')
+        act_open.setToolTip('Ajouter une trace GPS NMEA (Ctrl+O)')
         act_open.triggered.connect(self._open_dialog)
         tb.addAction(act_open)
 
@@ -1967,13 +1978,20 @@ class MainWindow(QMainWindow):
         mb = self.menuBar()
 
         fm = mb.addMenu('Fichier')
-        a = QAction('Ouvrir…', self)
-        a.setShortcut('Ctrl+O')
-        a.triggered.connect(self._open_dialog)
-        fm.addAction(a)
+
+        a_open_json = QAction('Ouvrir…', self)
+        a_open_json.setToolTip('Ouvrir un fichier de trace JSON (annotations photo)')
+        a_open_json.triggered.connect(self._open_track_json)
+        fm.addAction(a_open_json)
+
+        a_gps = QAction('Ajouter une trace GPS…', self)
+        a_gps.setShortcut('Ctrl+O')
+        a_gps.setToolTip('Charger un fichier GPS NMEA sur la carte (Ctrl+O)')
+        a_gps.triggered.connect(self._open_dialog)
+        fm.addAction(a_gps)
 
         fm.addSeparator()
-        self._recent_menu = fm.addMenu('Fichiers récents')
+        self._recent_menu = fm.addMenu('Fichiers récents GPS')
         self._refresh_recent_menu()
 
         fm.addSeparator()
@@ -2396,7 +2414,25 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    # ── Enregistrement de la trace ────────────────────────────────────
+    # ── Ouverture / enregistrement de la trace ────────────────────────
+
+    def _open_track_json(self):
+        """Ouvre un fichier JSON de trace (annotations photo)."""
+        default_dir = str(self._current_track_path.parent)
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Ouvrir une trace…',
+            default_dir,
+            'Fichiers JSON (*.json);;Tous les fichiers (*)')
+        if not path:
+            return
+        self._current_track_path = Path(path)
+        self._load_track_json()
+        self._map.reload_photo_annotations()
+        self._update_track_title()
+        n = len(self._map._photo_data)
+        self._sb.showMessage(
+            f'Trace ouverte : {self._current_track_path.name}'
+            f'  •  {n} annotation{"s" if n > 1 else ""}')
 
     def _track_save(self):
         """Enregistre dans le fichier de trace actif (Ctrl+S)."""
