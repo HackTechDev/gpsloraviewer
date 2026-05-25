@@ -1487,11 +1487,6 @@ class MainWindow(QMainWindow):
 
         # Canvases
         self._map       = MapCanvas()
-        self._map.tile_loading.connect(self._on_tile_loading)
-        self._map.measure_updated.connect(self._sb.showMessage)
-        self._map.measure_mode_cancelled.connect(
-            lambda: self._act_meas.setChecked(False))
-        self._act_meas.toggled.connect(self._map.set_measure_mode)
         self._chart_alt = ChartCanvas('Profil altimétrique', C_ALT, self._on_hover)
         self._chart_spd = ChartCanvas('Vitesse (km/h)',       C_SPD, self._on_hover)
         self._stats     = StatsPanel()
@@ -1539,6 +1534,13 @@ class MainWindow(QMainWindow):
         size_mb = _cache_size_mb()
         cache_msg = f'{size_mb:.1f} Mo en cache' if size_mb >= 0.01 else 'cache vide'
         self._sb.showMessage(f'Prêt — Ouvrir un fichier GPS pour commencer  •  {cache_msg}')
+
+        # Connexions canvas → widgets (après création de _map et _sb)
+        self._map.tile_loading.connect(self._on_tile_loading)
+        self._map.measure_updated.connect(self._sb.showMessage)
+        self._map.measure_mode_cancelled.connect(
+            lambda: self._act_meas.setChecked(False))
+        self._act_meas.toggled.connect(self._map.set_measure_mode)
 
     def _build_menus(self):
         mb = self.menuBar()
