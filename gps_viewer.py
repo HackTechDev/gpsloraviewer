@@ -909,8 +909,8 @@ class MapCanvas(FigureCanvas):
                     self._meas_timer.start()
             return
         if event.button == 1 and event.inaxes == self.ax and self._default_lim is not None:
-            # Clic sur une annotation photo → ouvre la visionneuse
-            idx = self._find_photo_at(event)
+            # Clic sur une annotation photo (croix ou miniature) → ouvre la visionneuse
+            idx = self._find_photo_at(event, check_thumbnail=True)
             if idx is not None:
                 self.photo_clicked.emit(idx)
                 return
@@ -1305,17 +1305,35 @@ class MapCanvas(FigureCanvas):
         if idx < len(self._photo_artists):
             self._photo_artists[idx].extend(eye_artists)
 
-    def _find_photo_at(self, event, radius_px: int = 48) -> 'int | None':
-        """Retourne l'index de la photo dont la croix est à ≤ radius_px pixels du curseur."""
+    def _find_photo_at(self, event, radius_px: int = 48,
+                       check_thumbnail: bool = False) -> 'int | None':
+        """Retourne l'index de la photo sous le curseur.
+
+        Vérifie :
+          - la distance en pixels à la croix (≤ radius_px)
+          - si check_thumbnail=True, la boîte de la miniature via contains()
+            (fiable uniquement lors d'un clic, pas d'un mouvement)
+        """
         if not self._photo_data or event.x is None or event.y is None:
             return None
         for i, entry in enumerate(self._photo_data):
+            # ── Proximité de la croix ────────────────────────────────
             try:
                 dp = self.ax.transData.transform((entry['x_m'], entry['y_m']))
                 if math.hypot(event.x - dp[0], event.y - dp[1]) <= radius_px:
                     return i
             except Exception:
                 pass
+            # ── Miniature (AnnotationBbox) ───────────────────────────
+            if check_thumbnail:
+                artists = self._photo_artists[i] if i < len(self._photo_artists) else []
+                if len(artists) >= 2:
+                    try:
+                        hit, _ = artists[1].contains(event)
+                        if hit:
+                            return i
+                    except Exception:
+                        pass
         return None
 
     def _on_key(self, event):
