@@ -199,6 +199,7 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot  = None
         self._gps: GPSData | None = None
         self._default_lim = None   # (xlim, ylim) pour reset
+        self._tile_source = cx.providers.OpenStreetMap.Mapnik
 
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
@@ -268,10 +269,16 @@ class MapCanvas(FigureCanvas):
     def _add_tiles(self):
         try:
             cx.add_basemap(self.ax, crs='EPSG:3857',
-                           source=cx.providers.OpenStreetMap.Mapnik,
+                           source=self._tile_source,
                            zoom='auto', attribution_size=6)
         except Exception:
             self.ax.set_facecolor('#d9e8f5')
+
+    def set_tile_source(self, source) -> None:
+        """Change la source de tuiles et recharge la carte."""
+        self._tile_source = source
+        if self._gps is not None:
+            self._reload_tiles()
 
     # ── Rechargement tuiles après zoom/pan ──────────────────────────
 
@@ -608,6 +615,12 @@ class MainWindow(QMainWindow):
         act_home.triggered.connect(lambda: self._map.reset_view())
         tb.addAction(act_home)
 
+        self._act_tiles = QAction('🛰  Satellite', self)
+        self._act_tiles.setToolTip('Basculer vers la vue satellite (Ctrl+T)')
+        self._act_tiles.setShortcut('Ctrl+T')
+        self._act_tiles.triggered.connect(self._toggle_tiles)
+        tb.addAction(self._act_tiles)
+
         tb.addSeparator()
 
         self._lbl_tb = QLabel('Aucun fichier chargé')
@@ -754,6 +767,24 @@ class MainWindow(QMainWindow):
         self._chart_spd.update_cursor(index)
         if self._gps:
             self._stats.update_cursor(self._gps, index)
+
+    # ── Bascule carte / satellite ─────────────────────────────────────
+
+    _PROVIDERS = {
+        'osm': (cx.providers.OpenStreetMap.Mapnik,
+                '🛰  Satellite', 'Basculer vers la vue satellite (Ctrl+T)'),
+        'sat': (cx.providers.Esri.WorldImagery,
+                '🗺  Carte',     'Basculer vers la carte standard (Ctrl+T)'),
+    }
+
+    def _toggle_tiles(self):
+        current = self._map._tile_source
+        osm_src = self._PROVIDERS['osm'][0]
+        key = 'sat' if current == osm_src else 'osm'
+        src, label, tip = self._PROVIDERS[key]
+        self._map.set_tile_source(src)
+        self._act_tiles.setText(label)
+        self._act_tiles.setToolTip(tip)
 
     # ── À propos ─────────────────────────────────────────────────────
 
