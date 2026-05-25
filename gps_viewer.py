@@ -705,6 +705,8 @@ class MapCanvas(FigureCanvas):
             self._ov_ax = self.fig.add_axes(
                 [0.72, 0.02, 0.265, 0.22], zorder=15)
             self._ov_ax.set_axis_off()
+            # equal : Web Mercator a les mêmes unités en X et Y
+            self._ov_ax.set_aspect('equal', adjustable='datalim')
             self._ov_ax.patch.set_alpha(0.82)
             self._ov_ax.patch.set_facecolor('#f5f5f5')
             gps = self._gps
@@ -714,8 +716,10 @@ class MapCanvas(FigureCanvas):
                              color=C_START, markersize=4, zorder=2)
             self._ov_ax.plot(gps.xs[-1], gps.ys[-1], 's',
                              color=C_END, markersize=4, zorder=2)
-            self._ov_ax.set_xlim(gps.xs.min(), gps.xs.max())
-            self._ov_ax.set_ylim(gps.ys.min(), gps.ys.max())
+            mg = max((gps.xs.max() - gps.xs.min()) * 0.06,
+                     (gps.ys.max() - gps.ys.min()) * 0.06, 100)
+            self._ov_ax.set_xlim(gps.xs.min() - mg, gps.xs.max() + mg)
+            self._ov_ax.set_ylim(gps.ys.min() - mg, gps.ys.max() + mg)
             for sp in self._ov_ax.spines.values():
                 sp.set_edgecolor('#aaa')
                 sp.set_linewidth(0.8)
