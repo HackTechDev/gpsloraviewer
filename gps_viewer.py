@@ -200,7 +200,8 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot  = None
         self._gps: GPSData | None = None
         self._default_lim = None   # (xlim, ylim) pour reset
-        self._tile_source = cx.providers.OpenStreetMap.Mapnik
+        self._tile_source   = cx.providers.OpenStreetMap.Mapnik
+        self._tile_headers  = {}   # headers HTTP pour la source active
 
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
@@ -271,13 +272,18 @@ class MapCanvas(FigureCanvas):
         try:
             cx.add_basemap(self.ax, crs='EPSG:3857',
                            source=self._tile_source,
-                           zoom='auto', attribution_size=6)
-        except Exception:
+                           zoom='auto', attribution_size=6,
+                           headers=self._tile_headers or None)
+        except Exception as e:
             self.ax.set_facecolor('#d9e8f5')
+            self.ax.text(0.5, 0.02, f'Tuiles indisponibles : {e}',
+                         transform=self.ax.transAxes, ha='center',
+                         fontsize=8, color='#c00')
 
-    def set_tile_source(self, source) -> None:
+    def set_tile_source(self, source, headers: dict | None = None) -> None:
         """Change la source de tuiles et recharge la carte."""
-        self._tile_source = source
+        self._tile_source  = source
+        self._tile_headers = headers or {}
         if self._gps is not None:
             self._reload_tiles()
 
@@ -777,9 +783,11 @@ class MainWindow(QMainWindow):
             self._stats.update_cursor(self._gps, index)
 
     # ── Sources de tuiles disponibles ────────────────────────────────
+    # data.geopf.fr = nouveau portail IGN open data (2023), sans clé API.
+    # Remplace l'ancien wxs.ign.fr/essentiels désormais obsolète.
 
     _IGN_BASE = (
-        'https://wxs.ign.fr/essentiels/geoportail/wmts'
+        'https://data.geopf.fr/wmts'
         '?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0'
         '&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}'
         '&STYLE=normal'
@@ -789,27 +797,31 @@ class MainWindow(QMainWindow):
             'source': cx.providers.OpenStreetMap.Mapnik,
             'label':  '🗺  OpenStreetMap',
             'short':  'OSM',
+            'headers': {},
         },
         'esri': {
             'source': cx.providers.Esri.WorldImagery,
             'label':  '🛰  Satellite (Esri)',
             'short':  'Satellite Esri',
+            'headers': {},
         },
         'ign_ortho': {
-            'source': _IGN_BASE + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&FORMAT=image/jpeg',
+            'source':  _IGN_BASE + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&FORMAT=image/jpeg',
             'label':  '🛰  Orthophoto IGN',
             'short':  'Orthophoto IGN',
+            'headers': {'User-Agent': 'GPS-Viewer/1.0'},
         },
         'ign_plan': {
-            'source': _IGN_BASE + '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&FORMAT=image/png',
+            'source':  _IGN_BASE + '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&FORMAT=image/png',
             'label':  '🗾  Plan IGN',
             'short':  'Plan IGN',
+            'headers': {'User-Agent': 'GPS-Viewer/1.0'},
         },
     }
 
     def _select_tiles(self, key: str):
         info = self._TILE_SOURCES[key]
-        self._map.set_tile_source(info['source'])
+        self._map.set_tile_source(info['source'], info.get('headers', {}))
         self._btn_tiles.setText(f"🗺  {info['short']}")
 
     # ── À propos ─────────────────────────────────────────────────────
