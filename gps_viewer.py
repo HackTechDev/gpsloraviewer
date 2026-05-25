@@ -379,11 +379,17 @@ class MapCanvas(FigureCanvas):
         self._loading_text = None  # text artist, None si axes vidés
 
         # ── Mesure de distance ───────────────────────────────────────
-        self._measure_mode  = False
-        self._meas_pts      = []    # [(x_m, y_m), …] points placés
-        self._meas_artists  = []    # artists permanents à nettoyer
-        self._meas_rubber   = None  # ligne rubber-band live
-        self._meas_lbl_live = None  # label distance live
+        self._measure_mode   = False
+        self._meas_pts       = []    # [(x_m, y_m), …] points placés
+        self._meas_artists   = []    # artists permanents à nettoyer
+        self._meas_rubber    = None  # ligne rubber-band live
+        self._meas_lbl_live  = None  # label distance live
+        self._meas_pending   = None  # (x, y) en attente de confirmation
+
+        # Timer anti-dblclick : retarde chaque clic de 200 ms pour
+        # distinguer un simple clic d'un double-clic.
+        self._meas_timer = QTimer(self, singleShot=True, interval=200)
+        self._meas_timer.timeout.connect(self._meas_commit_pending)
 
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
@@ -424,6 +430,8 @@ class MapCanvas(FigureCanvas):
         self._meas_pts     = []
         self._meas_artists = []
         self._meas_rubber  = self._meas_lbl_live = None
+        self._meas_pending = None
+        self._meas_timer.stop()
         self.ax.cla()
         self.ax.set_axis_off()
         self.ax.set_aspect('equal', adjustable='datalim')
@@ -859,7 +867,15 @@ class MapCanvas(FigureCanvas):
     def _on_press(self, event):
         if self._measure_mode:
             if event.button == 1 and event.inaxes == self.ax and event.xdata is not None:
-                self._meas_add_point(event.xdata, event.ydata)
+                if getattr(event, 'dblclick', False):
+                    # Double-clic : annule le clic simple en attente et finalise
+                    self._meas_timer.stop()
+                    self._meas_pending = None
+                    self._meas_finalize()
+                else:
+                    # Simple clic : mise en attente 200 ms (anti-dblclick)
+                    self._meas_pending = (event.xdata, event.ydata)
+                    self._meas_timer.start()
             return
         if event.button == 1 and event.inaxes == self.ax and self._default_lim is not None:
             self._pan_xy   = (event.x, event.y)
@@ -928,6 +944,8 @@ class MapCanvas(FigureCanvas):
         self._meas_pts     = []
         self._meas_artists = []
         self._meas_rubber  = self._meas_lbl_live = None
+        self._meas_pending = None
+        self._meas_timer.stop()
         self._default_lim  = (xlim, ylim)
 
         self.ax.cla()
@@ -972,7 +990,41 @@ class MapCanvas(FigureCanvas):
             self.setCursor(Qt.OpenHandCursor)
             self.measure_updated.emit('')
 
+    def _meas_commit_pending(self):
+        """Appelé 200 ms après un clic simple : pose le point."""
+        if self._meas_pending is not None:
+            x, y = self._meas_pending
+            self._meas_pending = None
+            self._meas_add_point(x, y)
+
+    def _meas_finalize(self):
+        """Double-clic : fige la mesure en cours, prêt pour une nouvelle."""
+        for a in (self._meas_rubber, self._meas_lbl_live):
+            if a is not None:
+                try:
+                    a.remove()
+                except Exception:
+                    pass
+        self._meas_rubber = self._meas_lbl_live = None
+
+        n = len(self._meas_pts)
+        if n >= 2:
+            total_m = sum(
+                self._meas_dist_m(self._meas_pts[i][0], self._meas_pts[i][1],
+                                  self._meas_pts[i+1][0], self._meas_pts[i+1][1])
+                for i in range(n - 1))
+            msg = (f'Mesure figée — Total : {self._fmt_dist(total_m)}  •  '
+                   f'Cliquez pour une nouvelle mesure  •  Échap pour tout effacer')
+        else:
+            msg = ('Cliquez pour démarrer une mesure  •  Échap pour annuler')
+
+        self._meas_pts = []
+        self.measure_updated.emit(msg)
+        self.draw_idle()
+
     def _clear_measure(self):
+        self._meas_timer.stop()
+        self._meas_pending = None
         for a in self._meas_artists:
             try:
                 a.remove()
