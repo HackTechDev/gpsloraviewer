@@ -26,6 +26,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QStatusBar, QMessageBox,
     QFrame, QToolBar, QSizePolicy,
     QToolButton, QMenu,
+    QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer
 from PyQt5.QtGui import QFont
@@ -290,7 +291,7 @@ class MapCanvas(FigureCanvas):
     # ── Rechargement tuiles après zoom/pan ──────────────────────────
 
     def _reload_tiles(self):
-        if self._gps is None:
+        if self._default_lim is None:
             return
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
         for img in list(self.ax.images):
@@ -358,6 +359,37 @@ class MapCanvas(FigureCanvas):
         self.ax.set_xlim(self._default_lim[0])
         self.ax.set_ylim(self._default_lim[1])
         self._reload_tiles()
+
+    # ── Navigation vers des coordonnées ─────────────────────────────
+
+    def goto(self, lat: float, lon: float, zoom: int = 16):
+        """Centre la carte sur les coordonnées et affiche un repère rouge."""
+        cx_m = math.radians(lon) * WEB_MERC_R
+        cy_m = math.log(math.tan(math.radians(lat) / 2 + math.pi / 4)) * WEB_MERC_R
+
+        half = 20_037_508.34 / (2 ** max(1, min(zoom, 19))) * 4
+        xlim = (cx_m - half, cx_m + half)
+        ylim = (cy_m - half, cy_m + half)
+
+        self._gps         = None
+        self._cursor_dot  = None
+        self._default_lim = (xlim, ylim)
+
+        self.ax.cla()
+        self.ax.set_axis_off()
+        self.ax.set_aspect('equal', adjustable='datalim')
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+
+        self._add_tiles()
+
+        self.ax.plot(cx_m, cy_m, 'v', color='#e74c3c', markersize=22,
+                     zorder=10, markeredgecolor='white', markeredgewidth=2)
+        self.ax.plot(cx_m, cy_m, 'o', color='#e74c3c', markersize=7,
+                     zorder=11, markeredgecolor='white', markeredgewidth=1.5)
+
+        self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        self.draw()
 
     # ── Curseur synchronisé avec les graphiques ──────────────────────
 
@@ -586,6 +618,96 @@ class StatsPanel(QFrame):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Dialogue de navigation par coordonnées
+# ══════════════════════════════════════════════════════════════════════
+
+class CoordDialog(QDialog):
+    """Fenêtre de saisie de coordonnées GPS."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Aller aux coordonnées')
+        self.setFixedSize(380, 260)
+        self._build()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        # ── Champ de collage rapide ──────────────────────────────────
+        lbl_paste = QLabel('Coller des coordonnées (lat, lon) :')
+        lbl_paste.setStyleSheet('font-weight:bold; color:#444;')
+        layout.addWidget(lbl_paste)
+
+        self._paste = QLineEdit()
+        self._paste.setPlaceholderText('Ex : 48.8566, 2.3522')
+        self._paste.textChanged.connect(self._parse_paste)
+        layout.addWidget(self._paste)
+
+        # ── Grille lat / lon / zoom ──────────────────────────────────
+        grid = QGridLayout()
+        grid.setColumnStretch(1, 1)
+        grid.setVerticalSpacing(8)
+
+        grid.addWidget(QLabel('Latitude :'), 0, 0)
+        self._lat = QDoubleSpinBox()
+        self._lat.setRange(-90.0, 90.0)
+        self._lat.setDecimals(6)
+        self._lat.setSingleStep(0.001)
+        self._lat.setValue(48.8566)
+        self._lat.setSuffix(' °')
+        grid.addWidget(self._lat, 0, 1)
+
+        grid.addWidget(QLabel('Longitude :'), 1, 0)
+        self._lon = QDoubleSpinBox()
+        self._lon.setRange(-180.0, 180.0)
+        self._lon.setDecimals(6)
+        self._lon.setSingleStep(0.001)
+        self._lon.setValue(2.3522)
+        self._lon.setSuffix(' °')
+        grid.addWidget(self._lon, 1, 1)
+
+        grid.addWidget(QLabel('Zoom :'), 2, 0)
+        self._zoom = QSpinBox()
+        self._zoom.setRange(1, 19)
+        self._zoom.setValue(16)
+        self._zoom.setToolTip('1 = monde entier · 10 = ville · 16 = rue · 19 = très détaillé')
+        grid.addWidget(self._zoom, 2, 1)
+
+        layout.addLayout(grid)
+
+        # ── Exemples ─────────────────────────────────────────────────
+        ex = QLabel('Exemples : Paris 48.8566, 2.3522 · Strasbourg 48.5734, 7.7521 · Lyon 45.7640, 4.8357')
+        ex.setStyleSheet('color:#999; font-size:10px;')
+        ex.setWordWrap(True)
+        layout.addWidget(ex)
+
+        # ── Boutons OK / Annuler ─────────────────────────────────────
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText('Aller')
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    def _parse_paste(self, text: str):
+        """Extrait lat, lon depuis une chaîne 'lat, lon' collée."""
+        parts = text.strip().replace(';', ',').split(',')
+        if len(parts) >= 2:
+            try:
+                lat = float(parts[0].strip())
+                lon = float(parts[1].strip())
+                if -90 <= lat <= 90 and -180 <= lon <= 180:
+                    self._lat.setValue(lat)
+                    self._lon.setValue(lon)
+            except ValueError:
+                pass
+
+    def coords(self):
+        """Retourne (lat, lon, zoom)."""
+        return self._lat.value(), self._lon.value(), self._zoom.value()
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Fenêtre principale
 # ══════════════════════════════════════════════════════════════════════
 
@@ -621,6 +743,12 @@ class MainWindow(QMainWindow):
         act_home.setToolTip('Revenir à la vue initiale (Ctrl+R)')
         act_home.triggered.connect(lambda: self._map.reset_view())
         tb.addAction(act_home)
+
+        act_goto = QAction('📍  Coordonnées', self)
+        act_goto.setShortcut('Ctrl+G')
+        act_goto.setToolTip('Naviguer vers des coordonnées GPS (Ctrl+G)')
+        act_goto.triggered.connect(self._goto_coords)
+        tb.addAction(act_goto)
 
         self._btn_tiles = QToolButton()
         self._btn_tiles.setText('🗺  Fond de carte')
@@ -692,6 +820,17 @@ class MainWindow(QMainWindow):
         a2.setShortcut('Ctrl+Q')
         a2.triggered.connect(self.close)
         fm.addAction(a2)
+
+        nm = mb.addMenu('Navigation')
+        a_goto = QAction('Aller aux coordonnées…', self)
+        a_goto.setShortcut('Ctrl+G')
+        a_goto.triggered.connect(self._goto_coords)
+        nm.addAction(a_goto)
+
+        a_home = QAction('Recentrer la trace', self)
+        a_home.setShortcut('Ctrl+R')
+        a_home.triggered.connect(lambda: self._map.reset_view())
+        nm.addAction(a_home)
 
         hm = mb.addMenu('Aide')
         a3 = QAction('À propos', self)
@@ -823,6 +962,18 @@ class MainWindow(QMainWindow):
         info = self._TILE_SOURCES[key]
         self._map.set_tile_source(info['source'], info.get('headers', {}))
         self._btn_tiles.setText(f"🗺  {info['short']}")
+
+    # ── Navigation par coordonnées ────────────────────────────────────
+
+    def _goto_coords(self):
+        dlg = CoordDialog(self)
+        if dlg.exec_() == QDialog.Accepted:
+            lat, lon, zoom = dlg.coords()
+            self._sb.showMessage(f'Navigation vers ({lat:.5f}°, {lon:.5f}°) …')
+            QApplication.processEvents()
+            self._map.goto(lat, lon, zoom)
+            self._sb.showMessage(
+                f'Position : {lat:.6f}° N   {lon:.6f}° E   — Zoom {zoom}')
 
     # ── À propos ─────────────────────────────────────────────────────
 
