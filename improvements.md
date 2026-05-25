@@ -9,12 +9,7 @@
 
 ## Carte
 
-- **Mesure de distance** : outil clic-à-clic pour mesurer une distance entre deux points quelconques sur la carte
-- **Coloration de la trace par vitesse** : gradient de couleur (vert → rouge) sur le tracé en fonction de la vitesse instantanée
-- **Coloration par altitude** : variante avec un gradient basé sur l'altitude
 - **Affichage des waypoints** : marqueurs numérotés sur des points d'intérêt définis par l'utilisateur
-- **Miniature de localisation** : petite carte de contexte (vue d'ensemble) dans un coin, indiquant la position de la vue actuelle
-- **Grille de coordonnées** : affichage optionnel d'un quadrillage lat/lon sur la carte
 - **Sources de tuiles supplémentaires** : OpenTopoMap (topographie), CyclOSM (vélo), Stamen Terrain
 
 ## Graphiques
@@ -28,18 +23,9 @@
 ## Interface
 
 - **Mode sombre** : thème sombre pour les graphiques, le panneau et la barre d'outils
-- **Barre de progression** : lors du téléchargement des tuiles, afficher une barre de progression plutôt qu'un message dans la status bar
 - **Raccourcis clavier supplémentaires** : `+` / `-` pour zoomer, flèches pour pan
 - **Plein écran** : touche F11 pour passer la carte en plein écran
 - **Sauvegarde de la mise en page** : mémoriser la position du splitter et les préférences de fond de carte entre les sessions (fichier `~/.config/gps_viewer.ini`)
-- **Historique des fichiers récents** : menu Fichier → Fichiers récents avec les derniers fichiers ouverts
-
-## Performances
-
-- **Téléchargement asynchrone des tuiles** : charger les tuiles en arrière-plan dans un thread séparé pour ne pas bloquer l'interface pendant le chargement
-- **Niveaux de zoom adaptatifs** : réduire la résolution des tuiles hors de la zone d'intérêt pour accélérer l'affichage sur de grandes traces
-- **Simplification de la trace** : algorithme Douglas-Peucker pour réduire le nombre de points affichés à petite échelle, améliorant les performances avec des traces très longues (>10 000 points)
-- **Cache LRU en mémoire** : conserver les N dernières vues de carte en mémoire pour rendre les aller-retours entre vues instantanés
 
 ## Enregistreur Arduino
 

@@ -5,6 +5,7 @@
 - **Ouverture de fichier** via le menu Fichier → Ouvrir ou le bouton `📂 Ouvrir` (Ctrl+O)
 - **Glisser-déposer** d'un fichier `.txt` / `.nmea` / `.log` directement sur la fenêtre
 - **Argument en ligne de commande** : `python3 gps_viewer.py fichier.txt`
+- **Fichiers récents** : menu Fichier → Fichiers récents (10 derniers fichiers, persistés dans `~/.config/gps_viewer/recent.json`)
 - Filtrage automatique des trames invalides (`fix_quality = 0`)
 
 ## Carte
@@ -24,7 +25,30 @@
 | Orthophoto IGN | Photographies aériennes IGN France |
 | Plan IGN | Cartographie topographique IGN France |
 
-Changement via le bouton `🗺 Fond de carte` dans la barre d'outils ou le menu Navigation.
+Changement via le bouton `🗺 Fond de carte` dans la barre d'outils.
+
+### Coloration de la trace
+
+Sélectionnable via le bouton `🎨 Trace` :
+
+| Mode | Description |
+|------|-------------|
+| Couleur unie | Bleu uni (défaut) |
+| Altitude | Gradient bleu → vert → jaune → rouge selon l'altitude |
+| Vitesse | Gradient vert → orange → rouge selon la vitesse instantanée |
+
+Une colorbar est affichée en incrustation pour les modes dégradés.
+
+### Outils cartographiques
+
+- **Grille de coordonnées** (Ctrl+L) : quadrillage lat/lon adaptatif avec étiquettes, recalculé à chaque zoom/pan
+- **Miniature de localisation** (Ctrl+M) : inset en bas à droite affichant la trace complète et un rectangle rouge indiquant la vue courante
+- **Mesure de distance** (Ctrl+D) : outil clic-à-clic en mode croix
+  - Chaque clic pose un point et affiche le segment ainsi que le cumul total
+  - Ligne rubber-band animée avec la distance live entre deux clics
+  - Double-clic pour figer la mesure (les segments restent affichés) et démarrer une nouvelle
+  - Plusieurs mesures simultanées possibles ; Échap pour tout effacer
+  - Distances affichées en mètres (< 1 km) ou kilomètres (3 décimales)
 
 ## Graphiques
 
@@ -55,6 +79,14 @@ Affiché en permanence à droite de la carte :
 - Sélecteur de niveau de zoom (1 à 19)
 - Un repère rouge est affiché à la position choisie
 - Zoom, pan et changement de couche restent fonctionnels après navigation
+
+## Performances
+
+- **Chargement asynchrone des tuiles** : téléchargement en arrière-plan via `QThread` ; la trace est immédiatement visible pendant que les tuiles se chargent
+- **Barre de progression** : indicateur pulsé dans la barre de statut pendant le téléchargement
+- **Cache LRU en mémoire** : 20 dernières vues conservées en RAM pour des aller-retours instantanés
+- **Zoom adaptatif** : niveau de zoom OSM calculé automatiquement depuis l'étendue de la vue courante
+- **Simplification Douglas-Peucker** : epsilon ≈ 1,5 pixel, recalculé à chaque zoom/pan ; activé pour les traces ≥ 500 points
 
 ## Cache de tuiles
 
