@@ -1561,7 +1561,7 @@ class PhotoViewDialog(QDialog):
     def __init__(self, image_path: str, lat: float, lon: float, parent=None):
         super().__init__(parent)
         self.setWindowTitle(Path(image_path).name)
-        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.deletion_requested = False
         self._build(image_path, lat, lon)
 
     def _build(self, image_path: str, lat: float, lon: float):
@@ -1603,12 +1603,37 @@ class PhotoViewDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        btn = QPushButton('Fermer')
-        btn.setFixedWidth(100)
-        btn.clicked.connect(self.accept)
-        layout.addWidget(btn, 0, Qt.AlignRight)
+        # Barre de boutons
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
 
+        btn_del = QPushButton('🗑  Supprimer')
+        btn_del.setFixedWidth(130)
+        btn_del.setStyleSheet(
+            'QPushButton { color:white; background:#e74c3c; border-radius:4px; padding:4px 8px; }'
+            'QPushButton:hover { background:#c0392b; }')
+        btn_del.clicked.connect(self._on_delete)
+        btn_row.addWidget(btn_del)
+
+        btn_row.addSpacing(10)
+
+        btn_close = QPushButton('Fermer')
+        btn_close.setFixedWidth(100)
+        btn_close.clicked.connect(self.accept)
+        btn_row.addWidget(btn_close)
+
+        layout.addLayout(btn_row)
         self.adjustSize()
+
+    def _on_delete(self):
+        reply = QMessageBox.question(
+            self, 'Supprimer la photo',
+            'Supprimer définitivement cette photo et sa miniature\n'
+            'ainsi que sa référence sur la carte ?',
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            self.deletion_requested = True
+            self.accept()
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2056,7 +2081,7 @@ class MainWindow(QMainWindow):
     # ── Annotations photo ─────────────────────────────────────────────
 
     def _on_photo_clicked(self, index: int):
-        """Ouvre la photo en plein format dans une fenêtre dédiée."""
+        """Ouvre la photo en plein format ; supprime si demandé."""
         if index >= len(self._map._photo_data):
             return
         entry = self._map._photo_data[index]
@@ -2067,6 +2092,40 @@ class MainWindow(QMainWindow):
             return
         dlg = PhotoViewDialog(orig, entry['lat'], entry['lon'], self)
         dlg.exec_()
+        if dlg.deletion_requested:
+            self._delete_photo(index)
+
+    def _delete_photo(self, index: int):
+        """Supprime fichiers, artistes carte et entrée JSON pour l'annotation index."""
+        if index >= len(self._map._photo_data):
+            return
+        entry = self._map._photo_data[index]
+
+        # Suppression des fichiers
+        for key in ('orig_path', 'thumb_path'):
+            p = Path(entry.get(key, ''))
+            if p.exists():
+                try:
+                    p.unlink()
+                except Exception:
+                    pass
+
+        # Retrait des artistes de la carte
+        if index < len(self._map._photo_artists):
+            for art in self._map._photo_artists[index]:
+                try:
+                    art.remove()
+                except Exception:
+                    pass
+            self._map._photo_artists.pop(index)
+
+        self._map._photo_data.pop(index)
+        self._map.draw_idle()
+
+        # Mise à jour du JSON
+        self._save_track_json()
+        self._sb.showMessage(
+            f'Photo supprimée : {Path(entry["orig_path"]).name}')
 
     def _on_photo_requested(self, x_m: float, y_m: float):
         """Clic en mode photo : ouvre le sélecteur, copie et affiche la photo."""
