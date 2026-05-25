@@ -11,6 +11,8 @@ import sys
 import os
 import math
 import glob
+import shutil
+from pathlib import Path
 
 import numpy as np
 import matplotlib
@@ -19,6 +21,19 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.ticker as mticker
 import contextily as cx
+
+# ── Cache persistant de tuiles ────────────────────────────────────────
+# Par défaut contextily stocke les tuiles dans un dossier temporaire
+# supprimé à la fermeture. On le redirige vers ~/.cache/gps_viewer/tiles
+# pour qu'elles soient réutilisées entre les sessions.
+_TILE_CACHE_DIR = Path.home() / '.cache' / 'gps_viewer' / 'tiles'
+_TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+cx.set_cache_dir(str(_TILE_CACHE_DIR))
+
+
+def _cache_size_mb() -> float:
+    """Retourne la taille du cache de tuiles en Mo."""
+    return sum(f.stat().st_size for f in _TILE_CACHE_DIR.rglob('*') if f.is_file()) / 1_048_576
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter,
@@ -803,7 +818,9 @@ class MainWindow(QMainWindow):
         self._sb = QStatusBar()
         self._sb.setStyleSheet('font-size:11px; color:#555;')
         self.setStatusBar(self._sb)
-        self._sb.showMessage('Prêt — Ouvrir un fichier GPS pour commencer')
+        size_mb = _cache_size_mb()
+        cache_msg = f'{size_mb:.1f} Mo en cache' if size_mb >= 0.01 else 'cache vide'
+        self._sb.showMessage(f'Prêt — Ouvrir un fichier GPS pour commencer  •  {cache_msg}')
 
     def _build_menus(self):
         mb = self.menuBar()
@@ -831,6 +848,15 @@ class MainWindow(QMainWindow):
         a_home.setShortcut('Ctrl+R')
         a_home.triggered.connect(lambda: self._map.reset_view())
         nm.addAction(a_home)
+
+        om = mb.addMenu('Outils')
+        a_cache_info = QAction('Informations sur le cache…', self)
+        a_cache_info.triggered.connect(self._cache_info)
+        om.addAction(a_cache_info)
+
+        a_cache_clear = QAction('Vider le cache de tuiles…', self)
+        a_cache_clear.triggered.connect(self._cache_clear)
+        om.addAction(a_cache_clear)
 
         hm = mb.addMenu('Aide')
         a3 = QAction('À propos', self)
@@ -976,6 +1002,34 @@ class MainWindow(QMainWindow):
                 f'Position : {lat:.6f}° N   {lon:.6f}° E   — Zoom {zoom}')
 
     # ── À propos ─────────────────────────────────────────────────────
+
+    # ── Gestion du cache de tuiles ────────────────────────────────────
+
+    def _cache_info(self):
+        size_mb   = _cache_size_mb()
+        n_files   = sum(1 for f in _TILE_CACHE_DIR.rglob('*') if f.is_file())
+        QMessageBox.information(self, 'Cache de tuiles',
+            f'<b>Répertoire :</b><br><code>{_TILE_CACHE_DIR}</code><br><br>'
+            f'<b>Taille :</b> {size_mb:.2f} Mo<br>'
+            f'<b>Fichiers :</b> {n_files:,}<br><br>'
+            'Les tuiles téléchargées sont réutilisées entre les sessions,<br>'
+            'ce qui évite de les re-télécharger à chaque ouverture.')
+
+    def _cache_clear(self):
+        size_mb = _cache_size_mb()
+        if size_mb < 0.01:
+            QMessageBox.information(self, 'Cache de tuiles', 'Le cache est déjà vide.')
+            return
+        reply = QMessageBox.question(
+            self, 'Vider le cache',
+            f'Le cache occupe <b>{size_mb:.1f} Mo</b>.<br>'
+            'Supprimer toutes les tuiles en cache ?',
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if reply == QMessageBox.Yes:
+            shutil.rmtree(_TILE_CACHE_DIR, ignore_errors=True)
+            _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            cx.set_cache_dir(str(_TILE_CACHE_DIR))
+            self._sb.showMessage('Cache de tuiles vidé.')
 
     def _about(self):
         QMessageBox.about(self, 'À propos — GPS Viewer',
