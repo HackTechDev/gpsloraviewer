@@ -51,7 +51,7 @@ from PyQt5.QtWidgets import (
     QFrame, QToolBar, QSizePolicy,
     QToolButton, QMenu, QProgressBar,
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit, QGridLayout,
-    QScrollArea, QPushButton,
+    QScrollArea, QPushButton, QTextEdit, QFormLayout,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap
@@ -1558,13 +1558,15 @@ class CoordDialog(QDialog):
 class PhotoViewDialog(QDialog):
     """Affiche la photo originale en plein format dans une fenêtre dédiée."""
 
-    def __init__(self, image_path: str, lat: float, lon: float, parent=None):
+    def __init__(self, image_path: str, lat: float, lon: float,
+                 titre: str = '', description: str = '', parent=None):
         super().__init__(parent)
         self.setWindowTitle(Path(image_path).name)
         self.deletion_requested = False
-        self._build(image_path, lat, lon)
+        self._build(image_path, lat, lon, titre, description)
 
-    def _build(self, image_path: str, lat: float, lon: float):
+    def _build(self, image_path: str, lat: float, lon: float,
+               titre: str, description: str):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
@@ -1603,7 +1605,25 @@ class PhotoViewDialog(QDialog):
         info.setWordWrap(True)
         layout.addWidget(info)
 
-        # Barre de boutons
+        # ── Titre et description ──────────────────────────────────────
+        form = QFormLayout()
+        form.setSpacing(6)
+        form.setContentsMargins(0, 4, 0, 4)
+
+        self._titre_edit = QLineEdit(titre)
+        self._titre_edit.setPlaceholderText('Titre de la photo…')
+        form.addRow('Titre :', self._titre_edit)
+
+        self._desc_edit = QTextEdit()
+        self._desc_edit.setPlainText(description)
+        self._desc_edit.setPlaceholderText('Description…')
+        line_h = self._desc_edit.fontMetrics().lineSpacing()
+        self._desc_edit.setFixedHeight(line_h * 5 + 14)
+        form.addRow('Description :', self._desc_edit)
+
+        layout.addLayout(form)
+
+        # ── Barre de boutons ─────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
@@ -2081,7 +2101,7 @@ class MainWindow(QMainWindow):
     # ── Annotations photo ─────────────────────────────────────────────
 
     def _on_photo_clicked(self, index: int):
-        """Ouvre la photo en plein format ; supprime si demandé."""
+        """Ouvre la photo en plein format ; sauvegarde titre/description ; supprime si demandé."""
         if index >= len(self._map._photo_data):
             return
         entry = self._map._photo_data[index]
@@ -2090,10 +2110,21 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, 'Fichier introuvable',
                                 f'La photo originale est introuvable :\n{orig}')
             return
-        dlg = PhotoViewDialog(orig, entry['lat'], entry['lon'], self)
+        dlg = PhotoViewDialog(
+            orig, entry['lat'], entry['lon'],
+            entry.get('titre', ''), entry.get('description', ''), self)
         dlg.exec_()
         if dlg.deletion_requested:
             self._delete_photo(index)
+        else:
+            new_titre = dlg._titre_edit.text().strip()
+            new_desc  = dlg._desc_edit.toPlainText().strip()
+            if (new_titre != entry.get('titre', '')
+                    or new_desc != entry.get('description', '')):
+                self._map._photo_data[index]['titre']       = new_titre
+                self._map._photo_data[index]['description'] = new_desc
+                self._save_track_json()
+                self._sb.showMessage('Annotations photo mises à jour.')
 
     def _delete_photo(self, index: int):
         """Supprime fichiers, artistes carte et entrée JSON pour l'annotation index."""
@@ -2170,10 +2201,12 @@ class MainWindow(QMainWindow):
         _TRACKS_DIR.mkdir(parents=True, exist_ok=True)
         photos = [
             {
-                'lat':   round(e['lat'], 8),
-                'lon':   round(e['lon'], 8),
-                'file':  e['orig_path'],
-                'thumb': e['thumb_path'],
+                'lat':         round(e['lat'], 8),
+                'lon':         round(e['lon'], 8),
+                'file':        e['orig_path'],
+                'thumb':       e['thumb_path'],
+                'titre':       e.get('titre', ''),
+                'description': e.get('description', ''),
             }
             for e in self._map._photo_data
         ]
@@ -2195,10 +2228,14 @@ class MainWindow(QMainWindow):
                 orig      = item.get('file', '')
                 if thumb and Path(thumb).exists():
                     entries.append({
-                        'x_m': x_m,  'y_m': y_m,
-                        'lat': lat,  'lon': lon,
+                        'x_m':        x_m,
+                        'y_m':        y_m,
+                        'lat':        lat,
+                        'lon':        lon,
                         'orig_path':  orig,
                         'thumb_path': thumb,
+                        'titre':      item.get('titre', ''),
+                        'description': item.get('description', ''),
                     })
             self._map.load_photo_data(entries)
         except Exception:
