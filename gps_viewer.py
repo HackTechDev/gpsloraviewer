@@ -1902,6 +1902,36 @@ class PhotoViewDialog(QDialog):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Dialog propriétés du parcours
+# ══════════════════════════════════════════════════════════════════════
+
+class ParcoursPropDialog(QDialog):
+    def __init__(self, titre: str = '', description: str = '', parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Propriétés du parcours')
+        self.setMinimumWidth(440)
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        self._titre_edit = QLineEdit(titre)
+        self._titre_edit.setPlaceholderText('Nom du parcours…')
+        form.addRow('Titre :', self._titre_edit)
+
+        self._desc_edit = QTextEdit()
+        self._desc_edit.setPlainText(description)
+        self._desc_edit.setPlaceholderText('Description du parcours…')
+        self._desc_edit.setFixedHeight(120)
+        form.addRow('Description :', self._desc_edit)
+        layout.addLayout(form)
+
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText('Enregistrer')
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Fenêtre principale
 # ══════════════════════════════════════════════════════════════════════
 
@@ -1913,6 +1943,8 @@ class MainWindow(QMainWindow):
         self._gps: GPSData | None = None
         self._gps_list: list      = []
         self._startup_photos_shown = False
+        self._parcours_titre: str = ''
+        self._parcours_description: str = ''
         self._current_track_path: Path = self._resolve_startup_track()
         self._build_ui()
         self._build_menus()
@@ -2090,6 +2122,14 @@ class MainWindow(QMainWindow):
         a_gps.setToolTip('Charger un fichier GPS NMEA sur la carte (Ctrl+O)')
         a_gps.triggered.connect(self._open_dialog)
         fm.addAction(a_gps)
+
+        fm.addSeparator()
+
+        a_props = QAction('Propriétés du parcours…', self)
+        a_props.setShortcut('Ctrl+I')
+        a_props.setToolTip('Modifier le titre et la description de ce parcours (Ctrl+I)')
+        a_props.triggered.connect(self._edit_parcours_props)
+        fm.addAction(a_props)
 
         fm.addSeparator()
         self._recent_menu = fm.addMenu('Fichiers récents JSON')
@@ -2504,8 +2544,10 @@ class MainWindow(QMainWindow):
             for e in self._map._photo_data
         ]
         data = {
-            'gps_files': [os.path.abspath(g.filepath) for g in self._gps_list],
-            'photos':    photos,
+            'titre':       self._parcours_titre,
+            'description': self._parcours_description,
+            'gps_files':   [os.path.abspath(g.filepath) for g in self._gps_list],
+            'photos':      photos,
         }
         self._current_track_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
@@ -2519,6 +2561,9 @@ class MainWindow(QMainWindow):
             return
         try:
             data = json.loads(self._current_track_path.read_text(encoding='utf-8'))
+
+            self._parcours_titre       = data.get('titre', '')
+            self._parcours_description = data.get('description', '')
 
             # Réinitialise la liste GPS pour que le premier _load() fasse un reset carte
             self._gps_list = []
@@ -2642,7 +2687,23 @@ class MainWindow(QMainWindow):
         else:
             gps_part = f' — {n} traces GPS'
         track_part = self._current_track_path.name
-        self.setWindowTitle(f'GPS Viewer  [{track_part}]{gps_part}')
+        if self._parcours_titre:
+            self.setWindowTitle(
+                f'GPS Viewer  [{track_part}]  {self._parcours_titre}{gps_part}')
+        else:
+            self.setWindowTitle(f'GPS Viewer  [{track_part}]{gps_part}')
+
+    def _edit_parcours_props(self):
+        """Ouvre le dialog de titre/description et sauvegarde si modifié."""
+        dlg = ParcoursPropDialog(
+            self._parcours_titre, self._parcours_description, self)
+        if dlg.exec_() == QDialog.Accepted:
+            new_titre = dlg._titre_edit.text().strip()
+            new_desc  = dlg._desc_edit.toPlainText().strip()
+            if new_titre != self._parcours_titre or new_desc != self._parcours_description:
+                self._parcours_titre       = new_titre
+                self._parcours_description = new_desc
+                self._save_track_json()
 
     def _about(self):
         QMessageBox.about(self, 'À propos — GPS Viewer',
