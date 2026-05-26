@@ -4,7 +4,7 @@
 
 - **Export GPX / KML / GeoJSON** : permettre d'exporter la trace dans des formats standards utilisables dans d'autres outils (QGIS, Google Earth, Garmin, etc.)
 - **Import GPX** : lire directement les fichiers GPX produits par des appareils GPS commerciaux, en plus du format NMEA brut
-- **Comparaison de plusieurs traces** : charger plusieurs fichiers et les afficher simultanément sur la même carte avec des couleurs différentes
+- ~~**Comparaison de plusieurs traces**~~ ✅ *Implémenté* : plusieurs traces NMEA simultanées avec couleurs distinctes, sauvegardées dans le fichier JSON
 - **Segmentation automatique** : détecter les pauses (vitesse nulle prolongée) et découper la trace en segments distincts avec des statistiques par segment
 
 ## Carte

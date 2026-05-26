@@ -11,7 +11,9 @@ gpslora/
 ├── gps_viewer.py            # Application desktop PyQt5 (carte + graphiques)
 ├── gps_map.py               # Générateur de carte HTML (Folium + Chart.js)
 ├── GPS02.txt                # Exemple de fichier NMEA enregistré
-└── exemples/                # Exemples de traces GPS
+├── exemples/                # Exemples de traces GPS
+└── tracks/
+    └── images/              # Miniatures et copies des photos annotées
 ```
 
 ## Matériel requis (Arduino)
@@ -53,9 +55,11 @@ pip install PyQt5 matplotlib contextily numpy
 
 ```bash
 python3 gps_viewer.py
-# ou avec un fichier directement :
-python3 gps_viewer.py GPS02.txt
+# ou avec un fichier JSON directement :
+python3 gps_viewer.py session.json
 ```
+
+Au démarrage sans argument, le dernier fichier JSON utilisé est rouvert automatiquement.
 
 ### Visualisation HTML
 
@@ -64,19 +68,52 @@ python3 gps_map.py GPS02.txt
 # Ouvre GPS02_map.html dans le navigateur par défaut
 ```
 
+## Fichier de trace JSON
+
+Le fichier `.json` est le document central de l'application. Il regroupe les chemins vers une ou plusieurs traces GPS NMEA et toutes les annotations photo.
+
+```json
+{
+  "gps_files": ["/chemin/absolu/GPS01.txt", "/chemin/absolu/GPS02.txt"],
+  "photos": [
+    {
+      "lat": 48.123456, "lon": 7.654321,
+      "file": "tracks/images/photo_001.jpg",
+      "thumb": "tracks/images/photo_001_thumb.jpg",
+      "titre": "Titre optionnel",
+      "description": "Description optionnelle",
+      "angle": 90.0
+    }
+  ]
+}
+```
+
+**Opérations disponibles (menu Fichier) :**
+
+| Action | Raccourci | Description |
+|--------|-----------|-------------|
+| Ouvrir… | — | Charge un fichier JSON existant |
+| Ajouter une trace GPS… | Ctrl+O | Ajoute une trace NMEA sur la carte courante |
+| Enregistrer | Ctrl+S | Sauvegarde dans le fichier actif |
+| Enregistrer sous… | Ctrl+Shift+S | Sauvegarde sous un nouveau nom |
+| Fichiers récents JSON | — | 10 derniers fichiers JSON utilisés |
+
+La barre de titre affiche : `GPS Viewer  [nom.json] — fichier.txt` (ou `— N traces GPS` si plusieurs).
+
 ## Fonctionnalités principales
 
-### Chargement des données
+### Traces GPS multiples
 
-- Ouverture via menu, bouton, glisser-déposer ou argument en ligne de commande
-- **Fichiers récents** : 10 derniers fichiers accessibles via Fichier → Fichiers récents
-- Filtrage automatique des trames invalides
+- **Plusieurs traces simultanées** : chaque fichier NMEA est affiché avec une couleur distincte (palette de 8 couleurs cycliques)
+- Filtrage automatique des trames invalides (`fix_quality = 0`)
+- Chaque trace affiche un marqueur de départ (cercle) et d'arrivée (carré) dans sa couleur
+- Légende avec le nom de chaque fichier
+- Les graphiques et statistiques reflètent la dernière trace ajoutée
 
 ### Carte interactive
 
 - Trace GPS sur fond de carte rendu nativement (matplotlib + contextily)
 - Zoom à la molette, pan par clic-glisser, recentrage `⌂` (Ctrl+R)
-- Marqueur de départ (cercle vert) et d'arrivée (carré rouge)
 
 **Fonds de carte disponibles :**
 
@@ -91,7 +128,7 @@ python3 gps_map.py GPS02.txt
 
 | Mode | Description |
 |------|-------------|
-| Couleur unie | Bleu uni (défaut) |
+| Couleur unie | Couleur de palette par trace (défaut) |
 | Altitude | Gradient bleu → vert → jaune → rouge |
 | Vitesse | Gradient vert → orange → rouge |
 
@@ -103,6 +140,15 @@ python3 gps_map.py GPS02.txt
   - Ligne rubber-band animée entre deux clics avec distance live
   - Double-clic pour figer la mesure et démarrer une nouvelle
   - Plusieurs mesures simultanées ; Échap pour tout effacer
+
+### Annotations photo
+
+- **Mode photo** : bouton `📷 Photo` ou touche `P` — curseur croix
+- Clic sur la carte → sélecteur de fichier image (JPG, PNG, BMP, GIF, TIFF, WebP)
+- L'image est copiée dans `tracks/images/`, une miniature 80×80 px est générée
+- Chaque annotation affiche une croix rouge et la miniature reliée par une flèche
+- **Clic sur la croix ou la miniature** → visionneuse plein format avec titre, description éditables et bouton Supprimer
+- **Indicateur de direction** (œil) : survoler une annotation puis `V` (afficher/masquer), `W` (+15°), `X` (−15°)
 
 ### Navigation par coordonnées
 
@@ -123,12 +169,18 @@ Distance totale, durée, altitude min/max/moy, vitesse max/moy. Bloc curseur en 
 
 | Raccourci | Action |
 |-----------|--------|
-| Ctrl+O | Ouvrir un fichier |
+| Ctrl+O | Ajouter une trace GPS |
+| Ctrl+S | Enregistrer le fichier JSON |
+| Ctrl+Shift+S | Enregistrer sous… |
 | Ctrl+R | Recentrer sur la trace |
 | Ctrl+L | Afficher/masquer la grille de coordonnées |
 | Ctrl+M | Afficher/masquer la miniature |
 | Ctrl+D | Activer/désactiver l'outil de mesure |
 | Ctrl+G | Naviguer vers des coordonnées |
+| P | Activer/désactiver le mode photo |
+| V | Afficher/masquer l'indicateur de direction (œil) |
+| W | Tourner l'indicateur de +15° |
+| X | Tourner l'indicateur de −15° |
 | Échap | Effacer toutes les mesures |
 
 ## Performances
@@ -145,6 +197,14 @@ Les tuiles sont stockées dans `~/.cache/gps_viewer/tiles/` entre les sessions.
 
 - **Outils → Informations sur le cache** : chemin, taille (Mo), nombre de fichiers
 - **Outils → Vider le cache** : suppression avec confirmation
+
+## Fichiers de configuration
+
+| Fichier | Contenu |
+|---------|---------|
+| `~/.config/gps_viewer/last_track.txt` | Chemin du dernier fichier JSON ouvert |
+| `~/.config/gps_viewer/recent_tracks.json` | Liste des 10 derniers fichiers JSON |
+| `~/.cache/gps_viewer/tiles/` | Cache persistant des tuiles cartographiques |
 
 ## Format de fichier GPS
 

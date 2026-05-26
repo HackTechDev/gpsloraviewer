@@ -1,20 +1,58 @@
 # Fonctionnalités — GPS Viewer
 
-## Chargement des données
+## Fichier de trace JSON
 
-- **Ouverture de fichier** via le menu Fichier → Ouvrir ou le bouton `📂 Ouvrir` (Ctrl+O)
+Le fichier de trace JSON est le document central de l'application. Il regroupe :
+- les chemins absolus vers une ou plusieurs traces GPS NMEA
+- toutes les annotations photo (position, miniature, titre, description, angle de vue)
+
+**Opérations disponibles (menu Fichier) :**
+
+| Action | Raccourci | Description |
+|--------|-----------|-------------|
+| Ouvrir… | — | Charge un fichier JSON existant (traces GPS + photos) |
+| Ajouter une trace GPS… | Ctrl+O | Ajoute une trace NMEA sur la carte courante |
+| Enregistrer | Ctrl+S | Sauvegarde dans le fichier actif |
+| Enregistrer sous… | Ctrl+Shift+S | Sauvegarde sous un nouveau nom |
+
+- Au **démarrage**, le dernier fichier JSON utilisé est rouvert automatiquement (`~/.config/gps_viewer/last_track.txt`)
+- **Fichiers récents JSON** : menu Fichier → Fichiers récents JSON (10 derniers, persistés dans `~/.config/gps_viewer/recent_tracks.json`)
 - **Glisser-déposer** d'un fichier `.txt` / `.nmea` / `.log` directement sur la fenêtre
 - **Argument en ligne de commande** : `python3 gps_viewer.py fichier.txt`
-- **Fichiers récents** : menu Fichier → Fichiers récents (10 derniers fichiers, persistés dans `~/.config/gps_viewer/recent.json`)
+- La barre de titre indique : `GPS Viewer  [nom.json] — fichier.txt`
+
+### Format JSON
+
+```json
+{
+  "gps_files": ["/chemin/absolu/GPS01.txt", "/chemin/absolu/GPS02.txt"],
+  "photos": [
+    {
+      "lat": 48.123456, "lon": 7.654321,
+      "file": "tracks/images/photo_20250101_001.jpg",
+      "thumb": "tracks/images/photo_20250101_001_thumb.jpg",
+      "titre": "Titre optionnel",
+      "description": "Description optionnelle",
+      "angle": 90.0
+    }
+  ]
+}
+```
+
+## Traces GPS
+
+- **Plusieurs traces simultanées** : chaque fichier NMEA ajouté est affiché avec une couleur distincte (palette de 8 couleurs cycliques)
 - Filtrage automatique des trames invalides (`fix_quality = 0`)
+- Chaque trace affiche un marqueur de **départ** (cercle) et d'**arrivée** (carré) dans sa couleur
+- La légende indique le nom de chaque fichier
+- Les graphiques et statistiques reflètent toujours la **dernière trace ajoutée**
 
 ## Carte
 
-- Affichage de la trace GPS sur une carte interactive rendue nativement (matplotlib + contextily)
-- Marqueur de **départ** (cercle vert) et d'**arrivée** (carré rouge)
+- Affichage des traces GPS sur une carte interactive rendue nativement (matplotlib + contextily)
 - **Zoom à la molette** centré sur le pointeur
 - **Pan** par clic gauche + glisser
-- **Recentrage** sur la trace complète : bouton `⌂ Recentrer` (Ctrl+R)
+- **Recentrage** sur toutes les traces : bouton `⌂ Recentrer` (Ctrl+R)
 
 ### Fonds de carte disponibles
 
@@ -33,7 +71,7 @@ Sélectionnable via le bouton `🎨 Trace` :
 
 | Mode | Description |
 |------|-------------|
-| Couleur unie | Bleu uni (défaut) |
+| Couleur unie | Couleur de palette par trace (défaut) |
 | Altitude | Gradient bleu → vert → jaune → rouge selon l'altitude |
 | Vitesse | Gradient vert → orange → rouge selon la vitesse instantanée |
 
@@ -50,6 +88,23 @@ Une colorbar est affichée en incrustation pour les modes dégradés.
   - Plusieurs mesures simultanées possibles ; Échap pour tout effacer
   - Distances affichées en mètres (< 1 km) ou kilomètres (3 décimales)
 
+## Annotations photo
+
+- **Mode photo** : bouton `📷 Photo` ou touche `P` — le curseur devient une croix
+- Clic sur la carte → sélecteur de fichier image (JPG, PNG, BMP, GIF, TIFF, WebP)
+- L'image originale est copiée dans `tracks/images/`, une miniature 80×80 px est générée
+- Chaque annotation affiche une croix rouge et la miniature reliée par une flèche
+- **Clic sur la croix ou la miniature** → visionneuse plein format avec :
+  - Affichage de l'image (jusqu'à 90 % de l'écran)
+  - Coordonnées GPS et chemin du fichier
+  - Champs titre et description éditables
+  - Bouton Supprimer (supprime les fichiers + l'entrée JSON)
+- **Indicateur de direction** (œil) : survoler une annotation puis :
+  - `V` — affiche / masque l'indicateur
+  - `W` — tourne de +15°
+  - `X` — tourne de −15°
+- Les annotations et leurs paramètres sont sauvegardés dans le fichier JSON actif
+
 ## Graphiques
 
 - **Profil altimétrique** : altitude en mètres en fonction de la distance parcourue
@@ -62,7 +117,7 @@ Affiché en permanence à droite de la carte :
 
 | Statistique | Description |
 |-------------|-------------|
-| Fichier | Nom du fichier chargé |
+| Fichier | Nom du fichier GPS actif |
 | Points GPS | Nombre de positions valides |
 | Distance | Distance totale parcourue (mètres) |
 | Durée | Durée de l'enregistrement (h/min/s) |
@@ -82,9 +137,10 @@ Affiché en permanence à droite de la carte :
 
 ## Performances
 
-- **Chargement asynchrone des tuiles** : téléchargement en arrière-plan via `QThread` ; la trace est immédiatement visible pendant que les tuiles se chargent
+- **Chargement asynchrone des tuiles** : téléchargement en arrière-plan via `QThread` ; les traces sont immédiatement visibles pendant que les tuiles se chargent
 - **Barre de progression** : indicateur pulsé dans la barre de statut pendant le téléchargement
 - **Cache LRU en mémoire** : 20 dernières vues conservées en RAM pour des aller-retours instantanés
+- **Cache persistant de tuiles** : `~/.cache/gps_viewer/tiles/` réutilisé entre les sessions
 - **Zoom adaptatif** : niveau de zoom OSM calculé automatiquement depuis l'étendue de la vue courante
 - **Simplification Douglas-Peucker** : epsilon ≈ 1,5 pixel, recalculé à chaque zoom/pan ; activé pour les traces ≥ 500 points
 
