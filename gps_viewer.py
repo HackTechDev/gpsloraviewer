@@ -65,11 +65,15 @@ C_CURSOR  = '#e74c3c'
 C_START   = '#2ecc71'
 C_END     = '#e74c3c'
 
+_TRACK_PALETTE = ['#1a6fbf', '#e74c3c', '#27ae60', '#f39c12',
+                  '#9b59b6', '#16a085', '#e67e22', '#2c3e50']
+
 WEB_MERC_R = 6_378_137.0
 
-_CONFIG_DIR  = Path.home() / '.config' / 'gps_viewer'
-_RECENT_FILE = _CONFIG_DIR / 'recent.json'
-_MAX_RECENT  = 10
+_CONFIG_DIR       = Path.home() / '.config' / 'gps_viewer'
+_RECENT_FILE      = _CONFIG_DIR / 'recent.json'
+_LAST_TRACK_FILE  = _CONFIG_DIR / 'last_track.txt'
+_MAX_RECENT       = 10
 
 _TRACKS_DIR     = Path('tracks')
 _TRACKS_IMG_DIR = _TRACKS_DIR / 'images'
@@ -367,6 +371,7 @@ class MapCanvas(FigureCanvas):
         self.ax.set_axis_off()
         self._cursor_dot  = None
         self._gps: GPSData | None = None
+        self._gps_list: list      = []
         self._default_lim = None   # (xlim, ylim) pour reset
         self._tile_source   = cx.providers.OpenStreetMap.Mapnik
         self._tile_headers  = {}   # headers HTTP pour la source active
@@ -377,9 +382,9 @@ class MapCanvas(FigureCanvas):
         self._pending_key = None   # clé de la dernière requête en cours
 
         # ── Simplification / coloration de trace ────────────────────
-        self._track_line   = None   # artist ou LineCollection de la trace
-        self._track_mode   = 'flat' # 'flat' | 'altitude' | 'speed'
-        self._colorbar_ax  = None   # inset axes pour la colorbar
+        self._track_artists: list = []  # un artist par GPSData dans _gps_list
+        self._track_mode    = 'flat'    # 'flat' | 'altitude' | 'speed'
+        self._colorbar_ax   = None      # inset axes pour la colorbar
 
         # ── Miniature de localisation ────────────────────────────────
         self._ov_ax        = None   # inset axes de la miniature
@@ -442,8 +447,9 @@ class MapCanvas(FigureCanvas):
 
     def load(self, gps: GPSData):
         self._gps = gps
+        self._gps_list     = [gps]
         self._loading_text = None
-        self._track_line   = None
+        self._track_artists = []
         self._colorbar_ax  = None
         self._ov_ax        = None
         self._ov_rect      = None
@@ -475,14 +481,18 @@ class MapCanvas(FigureCanvas):
         self.draw()
 
     def _draw_track(self):
-        gps = self._gps
-        self._track_line = self._add_track_artist()
-        self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
-                     color=C_START, markersize=13, zorder=7,
-                     markeredgecolor='white', markeredgewidth=2, label='Départ')
-        self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
-                     color=C_END, markersize=12, zorder=7,
-                     markeredgecolor='white', markeredgewidth=2, label='Arrivée')
+        self._track_artists = []
+        for i, gps in enumerate(self._gps_list):
+            color  = _TRACK_PALETTE[i % len(_TRACK_PALETTE)]
+            artist = self._add_track_artist_for(gps, color)
+            self._track_artists.append(artist)
+            self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
+                         color=color, markersize=11, zorder=7,
+                         markeredgecolor='white', markeredgewidth=2,
+                         label=gps.filename)
+            self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
+                         color=color, markersize=10, zorder=7,
+                         markeredgecolor='white', markeredgewidth=2)
         self.ax.legend(loc='upper left', fontsize=9,
                        framealpha=0.85, fancybox=True)
         self._cursor_dot, = self.ax.plot([], [], 'o',
@@ -491,13 +501,12 @@ class MapCanvas(FigureCanvas):
         if self._track_mode != 'flat':
             self._draw_colorbar()
 
-    def _add_track_artist(self):
-        """Crée et retourne l'artist de trace selon le mode courant."""
-        gps = self._gps
+    def _add_track_artist_for(self, gps: GPSData, color: str):
+        """Crée et retourne l'artist de trace pour un GPSData donné."""
         if self._track_mode == 'flat':
-            xs, ys = self._simplified_track()
+            xs, ys = self._simplified_track_for(gps)
             line, = self.ax.plot(
-                xs, ys, color=C_TRACK, linewidth=2.5, zorder=5,
+                xs, ys, color=color, linewidth=2.5, zorder=5,
                 solid_capstyle='round', solid_joinstyle='round')
             return line
 
@@ -505,15 +514,13 @@ class MapCanvas(FigureCanvas):
         if self._track_mode == 'altitude':
             raw = np.array([p['alt'] if p['alt'] is not None else 0
                             for p in gps.points], dtype=float)
-            cmap  = _CMAP_ALT
-            label = 'Alt (m)'
+            cmap = _CMAP_ALT
         else:  # speed
-            raw   = np.array([s if s is not None else 0
-                              for s in gps.speeds], dtype=float)
-            cmap  = _CMAP_SPD
-            label = 'Vit (km/h)'
+            raw  = np.array([s if s is not None else 0
+                             for s in gps.speeds], dtype=float)
+            cmap = _CMAP_SPD
 
-        xs, ys, vals = self._simplified_track_values(raw)
+        xs, ys, vals = self._simplified_track_values_for(gps, raw)
         vmin, vmax = vals.min(), vals.max()
         if vmin == vmax:
             vmax = vmin + 1
@@ -613,44 +620,48 @@ class MapCanvas(FigureCanvas):
             return max((xl[1]-xl[0])/ax_w, (yl[1]-yl[0])/ax_h) * 1.5
         return 1.0
 
-    def _simplified_track(self):
+    def _simplified_track_for(self, gps: GPSData):
         """Retourne (xs, ys) avec Douglas-Peucker si la trace > 500 pts."""
-        gps = self._gps
         if gps is None or gps.count < 500:
             return gps.xs, gps.ys
         mask = _douglas_peucker_mask(gps.xs, gps.ys, self._dp_epsilon())
         return gps.xs[mask], gps.ys[mask]
 
-    def _simplified_track_values(self, values: np.ndarray):
+    def _simplified_track_values_for(self, gps: GPSData, values: np.ndarray):
         """Retourne (xs, ys, values) après Douglas-Peucker."""
-        gps = self._gps
         if gps is None or gps.count < 500:
             return gps.xs, gps.ys, values
         mask = _douglas_peucker_mask(gps.xs, gps.ys, self._dp_epsilon())
         return gps.xs[mask], gps.ys[mask], values[mask]
 
-    def _redraw_track_line(self):
-        """Remplace l'artist de la trace avec la simplification courante."""
-        if self._track_line is not None:
-            self._track_line.remove()
-            self._track_line = None
+    def _redraw_all_tracks(self):
+        """Remplace tous les artists de trace avec la simplification courante."""
+        for artist in self._track_artists:
+            try:
+                artist.remove()
+            except Exception:
+                pass
+        self._track_artists = []
         if self._colorbar_ax is not None:
             try:
                 self._colorbar_ax.remove()
             except Exception:
                 pass
             self._colorbar_ax = None
-        if self._gps is None:
+        if not self._gps_list:
             return
-        self._track_line = self._add_track_artist()
-        if self._track_mode != 'flat':
+        for i, gps in enumerate(self._gps_list):
+            color  = _TRACK_PALETTE[i % len(_TRACK_PALETTE)]
+            artist = self._add_track_artist_for(gps, color)
+            self._track_artists.append(artist)
+        if self._track_mode != 'flat' and self._gps is not None:
             self._draw_colorbar()
 
     def set_track_mode(self, mode: str):
         """Change le mode de coloration : 'flat', 'altitude', 'speed'."""
         self._track_mode = mode
-        if self._gps is not None:
-            self._redraw_track_line()
+        if self._gps_list:
+            self._redraw_all_tracks()
             self.draw_idle()
 
     # ── Chargement asynchrone des tuiles ─────────────────────────────
@@ -862,8 +873,8 @@ class MapCanvas(FigureCanvas):
     def _reload_tiles(self):
         if self._default_lim is None:
             return
-        if self._gps is not None and self._gps.count >= 500:
-            self._redraw_track_line()
+        if any(g.count >= 500 for g in self._gps_list):
+            self._redraw_all_tracks()
         # Redessine les yeux (rayon dépend de la vue courante)
         for i, entry in enumerate(self._photo_data):
             if entry.get('angle') is not None:
@@ -978,11 +989,12 @@ class MapCanvas(FigureCanvas):
         xlim = (cx_m - half, cx_m + half)
         ylim = (cy_m - half, cy_m + half)
 
-        self._gps          = None
-        self._cursor_dot   = None
-        self._loading_text = None
-        self._track_line   = None
-        self._colorbar_ax  = None
+        self._gps           = None
+        self._gps_list      = []
+        self._cursor_dot    = None
+        self._loading_text  = None
+        self._track_artists = []
+        self._colorbar_ax   = None
         self._ov_ax        = None
         self._ov_rect      = None
         self._grid_artists = []
@@ -1008,6 +1020,93 @@ class MapCanvas(FigureCanvas):
         self._request_tiles()
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
+
+    # ── Affichage centré sur les photos (sans trace GPS) ─────────────
+
+    def center_on_photos(self):
+        """Centre la carte sur les annotations photo et charge les tuiles."""
+        if not self._photo_data:
+            return
+        xs = [e['x_m'] for e in self._photo_data]
+        ys = [e['y_m'] for e in self._photo_data]
+        xmin, xmax = min(xs), max(xs)
+        ymin, ymax = min(ys), max(ys)
+        mg = max(500, (xmax - xmin) * 0.35, (ymax - ymin) * 0.35)
+        xlim = (xmin - mg, xmax + mg)
+        ylim = (ymin - mg, ymax + mg)
+
+        self._loading_text  = None
+        self._gps           = None
+        self._gps_list      = []
+        self._track_artists = []
+        self._colorbar_ax   = None
+        self._ov_ax         = None
+        self._ov_rect       = None
+        self._grid_artists  = []
+        self._meas_pts      = []
+        self._meas_artists  = []
+        self._meas_rubber   = self._meas_lbl_live = None
+        self._meas_pending  = None
+        self._meas_timer.stop()
+
+        self.ax.cla()
+        self.ax.set_axis_off()
+        self.ax.set_aspect('equal', adjustable='datalim')
+        self._default_lim = (xlim, ylim)
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+
+        self._redraw_photos()
+        self._request_tiles()
+        self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        self.draw()
+
+    # ── Ajout d'une trace GPS supplémentaire ─────────────────────────
+
+    def add_track(self, gps: GPSData, color: str):
+        """Ajoute une trace GPS à la vue courante sans réinitialiser la carte."""
+        self._gps = gps
+        self._gps_list.append(gps)
+
+        # Dessine la nouvelle trace
+        artist = self._add_track_artist_for(gps, color)
+        self._track_artists.append(artist)
+
+        # Marqueurs départ / arrivée dans la couleur de la trace
+        self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
+                     color=color, markersize=11, zorder=7,
+                     markeredgecolor='white', markeredgewidth=2,
+                     label=gps.filename)
+        self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
+                     color=color, markersize=10, zorder=7,
+                     markeredgecolor='white', markeredgewidth=2)
+        self.ax.legend(loc='upper left', fontsize=9,
+                       framealpha=0.85, fancybox=True)
+
+        # Nouveau cursor dot pour cette trace (supprime l'ancien)
+        if self._cursor_dot is not None:
+            try:
+                self._cursor_dot.remove()
+            except Exception:
+                pass
+        self._cursor_dot, = self.ax.plot([], [], 'o',
+            color=C_CURSOR, markersize=12, zorder=10,
+            markeredgecolor='white', markeredgewidth=1.5, visible=False)
+
+        # Étend _default_lim pour englober la nouvelle trace
+        mg = max(100, (gps.xs.max() - gps.xs.min()) * 0.18,
+                       (gps.ys.max() - gps.ys.min()) * 0.18)
+        if self._default_lim is not None:
+            xl0, yl0 = self._default_lim
+            new_xl = (min(xl0[0], gps.xs.min() - mg), max(xl0[1], gps.xs.max() + mg))
+            new_yl = (min(yl0[0], gps.ys.min() - mg), max(yl0[1], gps.ys.max() + mg))
+        else:
+            new_xl = (gps.xs.min() - mg, gps.xs.max() + mg)
+            new_yl = (gps.ys.min() - mg, gps.ys.max() + mg)
+        self._default_lim = (new_xl, new_yl)
+
+        self._request_tiles()
+        self.draw_idle()
 
     # ── Curseur synchronisé avec les graphiques ──────────────────────
 
@@ -1812,7 +1911,9 @@ class MainWindow(QMainWindow):
         self.setWindowTitle('GPS Viewer')
         self.resize(1380, 840)
         self._gps: GPSData | None = None
-        self._current_track_path: Path = _TRACKS_JSON   # fichier de trace actif
+        self._gps_list: list      = []
+        self._startup_photos_shown = False
+        self._current_track_path: Path = self._resolve_startup_track()
         self._build_ui()
         self._build_menus()
         self.setAcceptDrops(True)
@@ -2045,6 +2146,13 @@ class MainWindow(QMainWindow):
         # Répartition initiale : 62 % carte / 38 % graphiques
         total = self._vsplit.height()
         self._vsplit.setSizes([int(total * 0.62), int(total * 0.38)])
+        if not self._startup_photos_shown:
+            self._startup_photos_shown = True
+            if self._map._photo_data:
+                if self._gps is None:
+                    self._map.center_on_photos()
+                else:
+                    self._map.reload_photo_annotations()
 
     # ── Drag & drop ──────────────────────────────────────────────────
 
@@ -2090,27 +2198,45 @@ class MainWindow(QMainWindow):
             self._sb.showMessage('Aucune donnée GPS valide')
             return
 
-        self._gps = GPSData(points, filepath)
+        gps = GPSData(points, filepath)
+        self._gps = gps
         self._add_to_recent(filepath)
-        self._map.load(self._gps)
-        self._chart_alt.load(self._gps.distances, self._gps.alts,  'Altitude (m)')
-        self._chart_spd.load(self._gps.distances, self._gps.speeds,'Vitesse (km/h)')
-        self._stats.refresh(self._gps)
 
-        self.setWindowTitle(f'GPS Viewer — {self._gps.filename}')
+        if not self._gps_list:
+            # Première trace : réinitialise la carte
+            self._map.load(gps)
+        else:
+            # Trace supplémentaire : ajoute sans réinitialiser
+            color = _TRACK_PALETTE[len(self._gps_list) % len(_TRACK_PALETTE)]
+            self._map.add_track(gps, color)
+
+        self._gps_list.append(gps)
+
+        # Graphiques et stats toujours sur la dernière trace ajoutée
+        self._chart_alt.load(gps.distances, gps.alts,   'Altitude (m)')
+        self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)')
+        self._stats.refresh(gps)
+
+        n_traces = len(self._gps_list)
+        titre_traces = (f'{n_traces} traces' if n_traces > 1
+                        else gps.filename)
+        self.setWindowTitle(f'GPS Viewer — {titre_traces}')
         self._lbl_tb.setText(
-            f'<b>{self._gps.filename}</b>'
-            f' &nbsp;|&nbsp; {self._gps.count:,} points'
-            f' &nbsp;|&nbsp; {self._gps.total_dist:.0f} m'
-            + (f' &nbsp;|&nbsp; Alt {self._gps.alt_min:.0f}–'
-               f'{self._gps.alt_max:.0f} m'
-               if self._gps.alt_min is not None else '')
-            + f' &nbsp;|&nbsp; Vmax {self._gps.spd_max:.1f} km/h'
+            f'<b>{gps.filename}</b>'
+            f' &nbsp;|&nbsp; {gps.count:,} points'
+            f' &nbsp;|&nbsp; {gps.total_dist:.0f} m'
+            + (f' &nbsp;|&nbsp; Alt {gps.alt_min:.0f}–'
+               f'{gps.alt_max:.0f} m'
+               if gps.alt_min is not None else '')
+            + f' &nbsp;|&nbsp; Vmax {gps.spd_max:.1f} km/h'
+            + (f' &nbsp;|&nbsp; <i>({n_traces} traces)</i>' if n_traces > 1 else '')
         )
         self._sb.showMessage(
-            f'{self._gps.filename} — {self._gps.count:,} positions valides  •  '
-            f'Distance : {self._gps.total_dist:.1f} m  •  '
-            f'Vmax : {self._gps.spd_max:.1f} km/h')
+            f'{gps.filename} — {gps.count:,} positions valides  •  '
+            f'Distance : {gps.total_dist:.1f} m  •  '
+            f'Vmax : {gps.spd_max:.1f} km/h'
+            + (f'  •  {n_traces} traces au total' if n_traces > 1 else '')
+        )
 
     # ── Curseur synchronisé ──────────────────────────────────────────
 
@@ -2381,17 +2507,40 @@ class MainWindow(QMainWindow):
             }
             for e in self._map._photo_data
         ]
+        data = {
+            'gps_files': [os.path.abspath(g.filepath) for g in self._gps_list],
+            'photos':    photos,
+        }
         self._current_track_path.write_text(
-            json.dumps({'photos': photos}, ensure_ascii=False, indent=2),
+            json.dumps(data, ensure_ascii=False, indent=2),
             encoding='utf-8')
+        self._persist_track_path()
         self._update_track_title()
 
     def _load_track_json(self):
-        """Charge les annotations photo depuis le fichier de trace actif."""
+        """Charge les traces GPS et les annotations photo depuis le fichier actif."""
         if not self._current_track_path.exists():
             return
         try:
-            data    = json.loads(self._current_track_path.read_text(encoding='utf-8'))
+            data = json.loads(self._current_track_path.read_text(encoding='utf-8'))
+
+            # Réinitialise la liste GPS pour que le premier _load() fasse un reset carte
+            self._gps_list = []
+            self._gps      = None
+
+            # Rétro-compatibilité : ancien format 'gps_file' singulier
+            gps_files = data.get('gps_files') or []
+            if not gps_files:
+                single = data.get('gps_file')
+                if single:
+                    gps_files = [single]
+
+            # Vide les photos avant le premier load pour éviter de redessiner les anciennes
+            self._map.load_photo_data([])
+            for gps_file in gps_files:
+                if Path(gps_file).exists():
+                    self._load(gps_file)
+
             entries = []
             for item in data.get('photos', []):
                 lat, lon  = item['lat'], item['lon']
@@ -2416,6 +2565,26 @@ class MainWindow(QMainWindow):
 
     # ── Ouverture / enregistrement de la trace ────────────────────────
 
+    def _resolve_startup_track(self) -> Path:
+        """Retourne le dernier fichier JSON utilisé, ou le chemin par défaut."""
+        try:
+            if _LAST_TRACK_FILE.exists():
+                p = Path(_LAST_TRACK_FILE.read_text(encoding='utf-8').strip())
+                if p.exists():
+                    return p
+        except Exception:
+            pass
+        return _TRACKS_JSON
+
+    def _persist_track_path(self):
+        """Sauvegarde le chemin du fichier de trace actif pour le prochain démarrage."""
+        try:
+            _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            _LAST_TRACK_FILE.write_text(
+                str(self._current_track_path), encoding='utf-8')
+        except Exception:
+            pass
+
     def _open_track_json(self):
         """Ouvre un fichier JSON de trace (annotations photo)."""
         default_dir = str(self._current_track_path.parent)
@@ -2426,8 +2595,12 @@ class MainWindow(QMainWindow):
         if not path:
             return
         self._current_track_path = Path(path)
+        self._persist_track_path()
         self._load_track_json()
-        self._map.reload_photo_annotations()
+        if self._gps is None:
+            self._map.center_on_photos()
+        else:
+            self._map.reload_photo_annotations()
         self._update_track_title()
         n = len(self._map._photo_data)
         self._sb.showMessage(
@@ -2496,13 +2669,8 @@ def main():
     win = MainWindow()
     win.show()
 
-    # Auto-chargement
     if len(sys.argv) > 1:
         win._load(sys.argv[1])
-    else:
-        candidates = sorted(glob.glob('GPS*.txt') + glob.glob('gps*.txt'))
-        if candidates:
-            win._load(candidates[-1])
 
     sys.exit(app.exec_())
 
