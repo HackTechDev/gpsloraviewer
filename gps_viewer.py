@@ -2092,7 +2092,7 @@ class MainWindow(QMainWindow):
         fm.addAction(a_gps)
 
         fm.addSeparator()
-        self._recent_menu = fm.addMenu('Fichiers récents GPS')
+        self._recent_menu = fm.addMenu('Fichiers récents JSON')
         self._refresh_recent_menu()
 
         fm.addSeparator()
@@ -2217,10 +2217,7 @@ class MainWindow(QMainWindow):
         self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)')
         self._stats.refresh(gps)
 
-        n_traces = len(self._gps_list)
-        titre_traces = (f'{n_traces} traces' if n_traces > 1
-                        else gps.filename)
-        self.setWindowTitle(f'GPS Viewer — {titre_traces}')
+        self._update_track_title()
         self._lbl_tb.setText(
             f'<b>{gps.filename}</b>'
             f' &nbsp;|&nbsp; {gps.count:,} points'
@@ -2631,10 +2628,16 @@ class MainWindow(QMainWindow):
         self._sb.showMessage(f'Trace enregistrée sous : {p.name}')
 
     def _update_track_title(self):
-        """Affiche le nom du fichier de trace dans la barre de titre."""
-        gps_part   = f' — {self._gps.filename}' if self._gps else ''
+        """Affiche le nom du fichier JSON (et traces GPS) dans la barre de titre."""
+        n = len(self._gps_list)
+        if n == 0:
+            gps_part = ''
+        elif n == 1:
+            gps_part = f' — {self._gps_list[0].filename}'
+        else:
+            gps_part = f' — {n} traces GPS'
         track_part = self._current_track_path.name
-        self.setWindowTitle(f'GPS Viewer{gps_part}  [{track_part}]')
+        self.setWindowTitle(f'GPS Viewer  [{track_part}]{gps_part}')
 
     def _about(self):
         QMessageBox.about(self, 'À propos — GPS Viewer',
