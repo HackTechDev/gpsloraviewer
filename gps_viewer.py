@@ -2535,8 +2535,8 @@ class MainWindow(QMainWindow):
             {
                 'lat':         round(e['lat'], 8),
                 'lon':         round(e['lon'], 8),
-                'file':        e['orig_path'],
-                'thumb':       e['thumb_path'],
+                'file':        os.path.abspath(e['orig_path']),
+                'thumb':       os.path.abspath(e['thumb_path']),
                 'titre':       e.get('titre', ''),
                 'description': e.get('description', ''),
                 'angle':       e.get('angle'),
@@ -2555,6 +2555,25 @@ class MainWindow(QMainWindow):
         self._persist_track_path()
         self._update_track_title()
 
+    def _resolve_media_path(self, path_str: str) -> str | None:
+        """Résout un chemin media en chemin absolu existant.
+
+        Essaie dans l'ordre : absolu, relatif au JSON, relatif au CWD.
+        """
+        if not path_str:
+            return None
+        p = Path(path_str)
+        if p.is_absolute():
+            return str(p) if p.exists() else None
+        # Relatif au répertoire du fichier JSON
+        p_json = self._current_track_path.parent / p
+        if p_json.exists():
+            return str(p_json.resolve())
+        # Relatif au CWD (compatibilité anciens fichiers)
+        if p.exists():
+            return str(p.resolve())
+        return None
+
     def _load_track_json(self):
         """Charge les traces GPS et les annotations photo depuis le fichier actif."""
         if not self._current_track_path.exists():
@@ -2565,10 +2584,6 @@ class MainWindow(QMainWindow):
             self._parcours_titre       = data.get('titre', '')
             self._parcours_description = data.get('description', '')
 
-            # Réinitialise la liste GPS pour que le premier _load() fasse un reset carte
-            self._gps_list = []
-            self._gps      = None
-
             # Rétro-compatibilité : ancien format 'gps_file' singulier
             gps_files = data.get('gps_files') or []
             if not gps_files:
@@ -2576,31 +2591,40 @@ class MainWindow(QMainWindow):
                 if single:
                     gps_files = [single]
 
-            # Vide les photos avant le premier load pour éviter de redessiner les anciennes
-            self._map.load_photo_data([])
-            for gps_file in gps_files:
-                if Path(gps_file).exists():
-                    self._load(gps_file)
-
+            # Construit les entrées photo AVANT le chargement GPS
+            # pour que map.load() puisse les dessiner immédiatement via _redraw_photos()
             entries = []
             for item in data.get('photos', []):
                 lat, lon  = item['lat'], item['lon']
                 x_m, y_m  = to_webmerc(lat, lon)
-                thumb     = item.get('thumb', '')
-                orig      = item.get('file', '')
-                if thumb and Path(thumb).exists():
+                thumb = self._resolve_media_path(item.get('thumb', ''))
+                orig  = self._resolve_media_path(item.get('file', '')) \
+                        or item.get('file', '')
+                if thumb:
                     entries.append({
-                        'x_m':        x_m,
-                        'y_m':        y_m,
-                        'lat':        lat,
-                        'lon':        lon,
-                        'orig_path':  orig,
-                        'thumb_path': thumb,
+                        'x_m':         x_m,
+                        'y_m':         y_m,
+                        'lat':         lat,
+                        'lon':         lon,
+                        'orig_path':   orig,
+                        'thumb_path':  thumb,
                         'titre':       item.get('titre', ''),
                         'description': item.get('description', ''),
                         'angle':       item.get('angle'),
                     })
+
+            # Charge les photos dans le canvas AVANT le premier map.load()
+            # afin que _redraw_photos() les dessine au moment du chargement GPS
             self._map.load_photo_data(entries)
+
+            # Réinitialise la liste GPS pour que le premier _load() fasse un reset carte
+            self._gps_list = []
+            self._gps      = None
+
+            for gps_file in gps_files:
+                if Path(gps_file).exists():
+                    self._load(gps_file)
+
         except Exception:
             pass
 
