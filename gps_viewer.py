@@ -71,7 +71,7 @@ _TRACK_PALETTE = ['#1a6fbf', '#e74c3c', '#27ae60', '#f39c12',
 WEB_MERC_R = 6_378_137.0
 
 _CONFIG_DIR       = Path.home() / '.config' / 'gps_viewer'
-_RECENT_FILE      = _CONFIG_DIR / 'recent.json'
+_RECENT_FILE      = _CONFIG_DIR / 'recent_tracks.json'
 _LAST_TRACK_FILE  = _CONFIG_DIR / 'last_track.txt'
 _MAX_RECENT       = 10
 
@@ -2200,7 +2200,6 @@ class MainWindow(QMainWindow):
 
         gps = GPSData(points, filepath)
         self._gps = gps
-        self._add_to_recent(filepath)
 
         if not self._gps_list:
             # Première trace : réinitialise la carte
@@ -2296,7 +2295,7 @@ class MainWindow(QMainWindow):
             label = os.path.basename(fp)
             a = QAction(label, self)
             a.setToolTip(fp)
-            a.triggered.connect(lambda checked=False, p=fp: self._load(p))
+            a.triggered.connect(lambda checked=False, p=fp: self._apply_track_json(Path(p)))
             self._recent_menu.addAction(a)
         self._recent_menu.addSeparator()
         clear_a = QAction('Effacer la liste', self)
@@ -2582,17 +2581,11 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
-    def _open_track_json(self):
-        """Ouvre un fichier JSON de trace (annotations photo)."""
-        default_dir = str(self._current_track_path.parent)
-        path, _ = QFileDialog.getOpenFileName(
-            self, 'Ouvrir une trace…',
-            default_dir,
-            'Fichiers JSON (*.json);;Tous les fichiers (*)')
-        if not path:
-            return
-        self._current_track_path = Path(path)
+    def _apply_track_json(self, path: Path):
+        """Charge un fichier JSON de trace (cœur commun pour menu et récents)."""
+        self._current_track_path = path
         self._persist_track_path()
+        self._add_to_recent(str(path))
         self._load_track_json()
         if self._gps is None:
             self._map.center_on_photos()
@@ -2603,6 +2596,17 @@ class MainWindow(QMainWindow):
         self._sb.showMessage(
             f'Trace ouverte : {self._current_track_path.name}'
             f'  •  {n} annotation{"s" if n > 1 else ""}')
+
+    def _open_track_json(self):
+        """Ouvre un fichier JSON de trace (annotations photo)."""
+        default_dir = str(self._current_track_path.parent)
+        path, _ = QFileDialog.getOpenFileName(
+            self, 'Ouvrir une trace…',
+            default_dir,
+            'Fichiers JSON (*.json);;Tous les fichiers (*)')
+        if not path:
+            return
+        self._apply_track_json(Path(path))
 
     def _track_save(self):
         """Enregistre dans le fichier de trace actif (Ctrl+S)."""
@@ -2625,6 +2629,7 @@ class MainWindow(QMainWindow):
             p = p.with_suffix('.json')
         self._current_track_path = p
         self._save_track_json()
+        self._add_to_recent(str(p))
         self._sb.showMessage(f'Trace enregistrée sous : {p.name}')
 
     def _update_track_title(self):
