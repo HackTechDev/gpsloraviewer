@@ -153,11 +153,11 @@ class MainWindow(QMainWindow):
         act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
         tb.addAction(act_ov)
 
-        tb.addSeparator()
-
         # ── Sélecteur de trace active pour les graphiques ────────────
-        self._track_selector = QWidget()
-        _sel_layout = QHBoxLayout(self._track_selector)
+        # Le séparateur et le widget sont gérés via leur QWidgetAction
+        # (setVisible sur le QWidget lui-même est ignoré dans un QToolBar)
+        _track_selector = QWidget()
+        _sel_layout = QHBoxLayout(_track_selector)
         _sel_layout.setContentsMargins(4, 0, 4, 0)
         _sel_layout.setSpacing(4)
         _lbl_sel = QLabel('📊 Graphiques :')
@@ -169,8 +169,10 @@ class MainWindow(QMainWindow):
         self._track_combo.currentIndexChanged.connect(self._on_chart_track_changed)
         _sel_layout.addWidget(_lbl_sel)
         _sel_layout.addWidget(self._track_combo)
-        self._track_selector.setVisible(False)
-        tb.addWidget(self._track_selector)
+        self._track_sel_sep    = tb.addSeparator()
+        self._track_sel_action = tb.addWidget(_track_selector)
+        self._track_sel_sep.setVisible(False)
+        self._track_sel_action.setVisible(False)
 
         tb.addSeparator()
 
@@ -403,7 +405,8 @@ class MainWindow(QMainWindow):
         self._track_combo.addItem(gps.filename)
         self._track_combo.setCurrentIndex(len(self._gps_list) - 1)
         self._track_combo.blockSignals(False)
-        self._track_selector.setVisible(len(self._gps_list) >= 2)
+        self._track_sel_action.setVisible(len(self._gps_list) >= 2)
+        self._track_sel_sep.setVisible(len(self._gps_list) >= 2)
 
         self._update_track_title()
         n_traces = len(self._gps_list)
@@ -790,7 +793,8 @@ class MainWindow(QMainWindow):
             self._track_combo.blockSignals(True)
             self._track_combo.clear()
             self._track_combo.blockSignals(False)
-            self._track_selector.setVisible(False)
+            self._track_sel_action.setVisible(False)
+            self._track_sel_sep.setVisible(False)
 
             for gps_file in gps_files:
                 if Path(gps_file).exists():
@@ -862,7 +866,8 @@ class MainWindow(QMainWindow):
         self._track_combo.blockSignals(True)
         self._track_combo.clear()
         self._track_combo.blockSignals(False)
-        self._track_selector.setVisible(False)
+        self._track_sel_action.setVisible(False)
+        self._track_sel_sep.setVisible(False)
         self._current_track_path = p
 
         # Saisie optionnelle du titre et de la description
