@@ -34,6 +34,7 @@ from map_canvas import MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR, _cache_size_m
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
 from stats_panel import StatsPanel
 from dialogs import CoordDialog, PhotoViewDialog, ParcoursPropDialog
+from view_3d import View3DWindow
 
 # ── Constantes application ────────────────────────────────────────────
 _CONFIG_DIR       = Path.home() / '.config' / 'gps_viewer'
@@ -57,6 +58,7 @@ class MainWindow(QMainWindow):
         self.resize(1380, 840)
         self._gps: GPSData | None = None
         self._gps_list: list      = []
+        self._view3d: 'View3DWindow | None' = None
         self._startup_photos_shown = False
         self._parcours_titre: str = ''
         self._parcours_description: str = ''
@@ -152,6 +154,13 @@ class MainWindow(QMainWindow):
         act_ov.setShortcut('Ctrl+M')
         act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
         tb.addAction(act_ov)
+
+        # ── Vue 3D ──────────────────────────────────────────────────
+        act_3d = QAction('🌐  Vue 3D', self)
+        act_3d.setShortcut('Ctrl+3')
+        act_3d.setToolTip('Afficher la trace en 3D (altitude) (Ctrl+3)')
+        act_3d.triggered.connect(self._open_3d_view)
+        tb.addAction(act_3d)
 
         # ── Sélecteur de trace active pour les graphiques ────────────
         # Le séparateur et le widget sont gérés via leur QWidgetAction
@@ -451,6 +460,22 @@ class MainWindow(QMainWindow):
             f'  •  {self._gps.count:,} points'
             f'  •  {self._gps.total_dist:.0f} m'
             f'  •  Vmax {self._gps.spd_max:.1f} km/h')
+
+    # ── Vue 3D ───────────────────────────────────────────────────────
+
+    def _open_3d_view(self):
+        if not self._gps_list:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.information(self, 'Vue 3D',
+                'Chargez au moins une trace GPS avant d\'ouvrir la vue 3D.')
+            return
+        if self._view3d is None or not self._view3d.isVisible():
+            self._view3d = View3DWindow(self._gps_list, parent=self)
+            self._view3d.show()
+        else:
+            self._view3d.refresh(self._gps_list)
+            self._view3d.raise_()
+            self._view3d.activateWindow()
 
     # ── Barre de progression tuiles ──────────────────────────────────
 
