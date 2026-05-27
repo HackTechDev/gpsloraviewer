@@ -227,6 +227,14 @@ class MainWindow(QMainWindow):
 
         fm = mb.addMenu('Fichier')
 
+        a_new = QAction('Nouveau parcours…', self)
+        a_new.setShortcut('Ctrl+N')
+        a_new.setToolTip('Créer un nouveau parcours vide (Ctrl+N)')
+        a_new.triggered.connect(self._new_parcours)
+        fm.addAction(a_new)
+
+        fm.addSeparator()
+
         a_open_json = QAction('Ouvrir…', self)
         a_open_json.setToolTip('Ouvrir un fichier de trace JSON (annotations photo)')
         a_open_json.triggered.connect(self._open_track_json)
@@ -783,6 +791,41 @@ class MainWindow(QMainWindow):
         self._sb.showMessage(
             f'Trace ouverte : {self._current_track_path.name}'
             f'  •  {n} annotation{"s" if n > 1 else ""}')
+
+    def _new_parcours(self):
+        """Crée un nouveau parcours vide et demande où l'enregistrer."""
+        path, _ = QFileDialog.getSaveFileName(
+            self, 'Nouveau parcours — choisir un emplacement',
+            str(self._current_track_path.parent),
+            'Fichiers JSON (*.json);;Tous les fichiers (*)')
+        if not path:
+            return
+        p = Path(path)
+        if p.suffix.lower() != '.json':
+            p = p.with_suffix('.json')
+
+        # Réinitialise tout l'état
+        self._gps      = None
+        self._gps_list = []
+        self._parcours_titre       = ''
+        self._parcours_description = ''
+        self._map.reset()
+        self._chart_alt.clear()
+        self._chart_spd.clear()
+        self._stats.clear()
+        self._lbl_tb.setText('Aucun fichier chargé')
+        self._current_track_path = p
+
+        # Saisie optionnelle du titre et de la description
+        dlg = ParcoursPropDialog('', '', self)
+        if dlg.exec_() == QDialog.Accepted:
+            self._parcours_titre       = dlg._titre_edit.text().strip()
+            self._parcours_description = dlg._desc_edit.toPlainText().strip()
+
+        self._save_track_json()
+        self._add_to_recent(str(p))
+        self._update_track_title()
+        self._sb.showMessage(f'Nouveau parcours créé : {p.name}')
 
     def _open_track_json(self):
         """Ouvre un fichier JSON de trace (annotations photo)."""

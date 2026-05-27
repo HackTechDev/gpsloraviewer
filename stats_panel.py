@@ -97,6 +97,11 @@ class StatsPanel(QFrame):
         credits.setAlignment(Qt.AlignCenter)
         root.addWidget(credits)
 
+    def clear(self):
+        for lv in self._vals.values():
+            lv.setText('—')
+        self._hover.setText('—')
+
     def refresh(self, gps: GPSData):
         dur = '—'
         if gps.duration_s is not None:

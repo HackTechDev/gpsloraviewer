@@ -927,6 +927,35 @@ class MapCanvas(FigureCanvas):
         self._request_tiles()
         self.draw_idle()
 
+    def reset(self):
+        """Remet le canvas dans l'état initial sans aucune trace ni photo."""
+        if self._tile_worker is not None:
+            self._tile_worker.cancel()
+            self._tile_worker = None
+        self._tile_timer.stop()
+        self._meas_timer.stop()
+        self._gps           = None
+        self._gps_list      = []
+        self._default_lim   = None
+        self._track_artists = []
+        self._colorbar_ax   = None
+        self._ov_ax         = None
+        self._ov_rect       = None
+        self._grid_artists  = []
+        self._meas_pts      = []
+        self._meas_artists  = []
+        self._meas_rubber   = None
+        self._meas_lbl_live = None
+        self._meas_pending  = None
+        self._measure_mode  = False
+        self._photo_data    = []
+        self._photo_artists = []
+        self._cursor_dot    = None
+        self._loading_text  = None
+        self.ax.cla()
+        self.ax.set_axis_off()
+        self._welcome()
+
     # ── Curseur synchronisé avec les graphiques ──────────────────────
 
     def update_cursor(self, index):

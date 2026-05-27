@@ -80,6 +80,11 @@ class ChartCanvas(FigureCanvas):
         self.fig.tight_layout(pad=0.8)
         self.draw()
 
+    def clear(self):
+        self._dist_arr = None
+        self._vline    = None
+        self._draw_empty()
+
     def update_cursor(self, index):
         if self._vline is None or self._dist_arr is None:
             return
