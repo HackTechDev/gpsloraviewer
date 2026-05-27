@@ -958,6 +958,10 @@ class MapCanvas(FigureCanvas):
 
     # ── Curseur synchronisé avec les graphiques ──────────────────────
 
+    def set_cursor_track(self, gps: GPSData):
+        """Définit la trace dont les coordonnées sont utilisées pour le curseur."""
+        self._gps = gps
+
     def update_cursor(self, index):
         if self._cursor_dot is None or self._gps is None:
             return

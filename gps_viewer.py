@@ -442,6 +442,7 @@ class MainWindow(QMainWindow):
         if not (0 <= index < len(self._gps_list)):
             return
         self._gps = self._gps_list[index]
+        self._map.set_cursor_track(self._gps)
         self._chart_alt.load(self._gps.distances, self._gps.alts,    'Altitude (m)')
         self._chart_spd.load(self._gps.distances, self._gps.speeds,  'Vitesse (km/h)')
         self._stats.refresh(self._gps)
