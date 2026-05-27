@@ -24,7 +24,7 @@ from PyQt5.QtWidgets import (
     QFileDialog, QStatusBar, QMessageBox,
     QFrame, QToolBar, QSizePolicy,
     QToolButton, QMenu, QProgressBar,
-    QDialog, QDialogButtonBox, QSplashScreen,
+    QDialog, QDialogButtonBox, QSplashScreen, QComboBox,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen
@@ -152,6 +152,25 @@ class MainWindow(QMainWindow):
         act_ov.setShortcut('Ctrl+M')
         act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
         tb.addAction(act_ov)
+
+        tb.addSeparator()
+
+        # ── Sélecteur de trace active pour les graphiques ────────────
+        self._track_selector = QWidget()
+        _sel_layout = QHBoxLayout(self._track_selector)
+        _sel_layout.setContentsMargins(4, 0, 4, 0)
+        _sel_layout.setSpacing(4)
+        _lbl_sel = QLabel('📊 Graphiques :')
+        _lbl_sel.setStyleSheet('color:#555; font-size:12px;')
+        self._track_combo = QComboBox()
+        self._track_combo.setFixedWidth(180)
+        self._track_combo.setToolTip(
+            'Choisir la trace affichée dans les graphiques et les statistiques')
+        self._track_combo.currentIndexChanged.connect(self._on_chart_track_changed)
+        _sel_layout.addWidget(_lbl_sel)
+        _sel_layout.addWidget(self._track_combo)
+        self._track_selector.setVisible(False)
+        tb.addWidget(self._track_selector)
 
         tb.addSeparator()
 
@@ -374,10 +393,17 @@ class MainWindow(QMainWindow):
 
         self._gps_list.append(gps)
 
-        # Graphiques et stats toujours sur la dernière trace ajoutée
+        # Graphiques et stats sur la dernière trace ajoutée
         self._chart_alt.load(gps.distances, gps.alts,   'Altitude (m)')
         self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)')
         self._stats.refresh(gps)
+
+        # Met à jour le sélecteur de trace
+        self._track_combo.blockSignals(True)
+        self._track_combo.addItem(gps.filename)
+        self._track_combo.setCurrentIndex(len(self._gps_list) - 1)
+        self._track_combo.blockSignals(False)
+        self._track_selector.setVisible(len(self._gps_list) >= 2)
 
         self._update_track_title()
         n_traces = len(self._gps_list)
@@ -406,6 +432,21 @@ class MainWindow(QMainWindow):
         self._chart_spd.update_cursor(index)
         if self._gps:
             self._stats.update_cursor(self._gps, index)
+
+    # ── Sélection de la trace active pour les graphiques ─────────────
+
+    def _on_chart_track_changed(self, index: int):
+        if not (0 <= index < len(self._gps_list)):
+            return
+        self._gps = self._gps_list[index]
+        self._chart_alt.load(self._gps.distances, self._gps.alts,    'Altitude (m)')
+        self._chart_spd.load(self._gps.distances, self._gps.speeds,  'Vitesse (km/h)')
+        self._stats.refresh(self._gps)
+        self._sb.showMessage(
+            f'Graphiques : {self._gps.filename}'
+            f'  •  {self._gps.count:,} points'
+            f'  •  {self._gps.total_dist:.0f} m'
+            f'  •  Vmax {self._gps.spd_max:.1f} km/h')
 
     # ── Barre de progression tuiles ──────────────────────────────────
 
@@ -743,9 +784,13 @@ class MainWindow(QMainWindow):
             # afin que _redraw_photos() les dessine au moment du chargement GPS
             self._map.load_photo_data(entries)
 
-            # Réinitialise la liste GPS pour que le premier _load() fasse un reset carte
+            # Réinitialise la liste GPS et le sélecteur de trace
             self._gps_list = []
             self._gps      = None
+            self._track_combo.blockSignals(True)
+            self._track_combo.clear()
+            self._track_combo.blockSignals(False)
+            self._track_selector.setVisible(False)
 
             for gps_file in gps_files:
                 if Path(gps_file).exists():
@@ -814,6 +859,10 @@ class MainWindow(QMainWindow):
         self._chart_spd.clear()
         self._stats.clear()
         self._lbl_tb.setText('Aucun fichier chargé')
+        self._track_combo.blockSignals(True)
+        self._track_combo.clear()
+        self._track_combo.blockSignals(False)
+        self._track_selector.setVisible(False)
         self._current_track_path = p
 
         # Saisie optionnelle du titre et de la description
