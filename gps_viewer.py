@@ -24,10 +24,10 @@ from PyQt5.QtWidgets import (
     QFileDialog, QStatusBar, QMessageBox,
     QFrame, QToolBar, QSizePolicy,
     QToolButton, QMenu, QProgressBar,
-    QDialog, QDialogButtonBox,
+    QDialog, QDialogButtonBox, QSplashScreen,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
-from PyQt5.QtGui import QFont, QPixmap
+from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen
 
 from gps_nmea import GPSData, load_points, to_webmerc, _webmerc_to_latlon
 from map_canvas import MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR, _cache_size_mb
@@ -903,6 +903,78 @@ class MainWindow(QMainWindow):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Splash screen
+# ══════════════════════════════════════════════════════════════════════
+
+_LOGO_PATH = Path(__file__).parent / 'logo.png'
+
+def _build_splash() -> QSplashScreen:
+    W, H = 480, 300
+
+    pix = QPixmap(W, H)
+    pix.fill(QColor('#1a2535'))
+
+    p = QPainter(pix)
+    p.setRenderHint(QPainter.Antialiasing)
+
+    # ── Zone logo (96 × 96) centré en haut ──────────────────────────
+    LOGO_W, LOGO_H = 96, 96
+    logo_x = (W - LOGO_W) // 2
+    logo_y = 28
+
+    if _LOGO_PATH.exists():
+        logo_pix = QPixmap(str(_LOGO_PATH)).scaled(
+            LOGO_W, LOGO_H, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        offset_x = (LOGO_W - logo_pix.width())  // 2
+        offset_y = (LOGO_H - logo_pix.height()) // 2
+        p.drawPixmap(logo_x + offset_x, logo_y + offset_y, logo_pix)
+    else:
+        # Placeholder : rectangle pointillé avec nom de fichier attendu
+        pen = QPen(QColor('#3d5a80'), 2, Qt.DashLine)
+        p.setPen(pen)
+        p.setBrush(Qt.NoBrush)
+        p.drawRoundedRect(logo_x, logo_y, LOGO_W, LOGO_H, 10, 10)
+        p.setPen(QColor('#3d5a80'))
+        p.setFont(QFont('Arial', 8))
+        p.drawText(logo_x, logo_y, LOGO_W, LOGO_H,
+                   Qt.AlignCenter, 'logo.png')
+
+    # ── Nom de l'application ─────────────────────────────────────────
+    p.setPen(QColor('#e8edf3'))
+    p.setFont(QFont('Arial', 24, QFont.Bold))
+    p.drawText(0, logo_y + LOGO_H + 16, W, 38,
+               Qt.AlignHCenter | Qt.AlignVCenter, 'GPS Viewer')
+
+    # ── Sous-titre ───────────────────────────────────────────────────
+    p.setPen(QColor('#7a9cbf'))
+    p.setFont(QFont('Arial', 10))
+    p.drawText(0, logo_y + LOGO_H + 54, W, 24,
+               Qt.AlignHCenter | Qt.AlignVCenter,
+               'Visualisation de traces GPS NMEA')
+
+    # ── Séparateur ───────────────────────────────────────────────────
+    sep_y = H - 36
+    p.setPen(QPen(QColor('#2c3e55'), 1))
+    p.drawLine(40, sep_y, W - 40, sep_y)
+
+    # ── Crédits cartographiques ──────────────────────────────────────
+    p.setPen(QColor('#3d5a80'))
+    p.setFont(QFont('Arial', 8))
+    p.drawText(0, sep_y + 4, W, 24,
+               Qt.AlignHCenter | Qt.AlignVCenter,
+               '© OpenStreetMap contributors  •  PyQt5 · matplotlib · contextily')
+
+    p.end()
+
+    splash = QSplashScreen(pix, Qt.WindowStaysOnTopHint)
+    splash.showMessage(
+        'Chargement…',
+        Qt.AlignBottom | Qt.AlignHCenter,
+        QColor('#7a9cbf'))
+    return splash
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Point d'entrée
 # ══════════════════════════════════════════════════════════════════════
 
@@ -920,8 +992,13 @@ def main():
     pal.setColor(QPalette.AlternateBase,QColor('#f0f0f0'))
     app.setPalette(pal)
 
+    splash = _build_splash()
+    splash.show()
+    app.processEvents()
+
     win = MainWindow()
     win.show()
+    splash.finish(win)
 
     if len(sys.argv) > 1:
         win._load(sys.argv[1])
