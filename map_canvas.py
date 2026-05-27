@@ -257,7 +257,7 @@ class MapCanvas(FigureCanvas):
     def _welcome(self):
         self.ax.set_facecolor('#2b2b2b')
         self.ax.text(0.5, 0.5,
-                     'Ouvrir un fichier GPS\n(Fichier → Ouvrir  ou  Ctrl+O)',
+                     'Ajouter une trace GPS\n(Fichier → Ajouter une trace GPS  ou  Ctrl+O)',
                      transform=self.ax.transAxes, ha='center', va='center',
                      color='#888', fontsize=13, fontfamily='monospace')
         self.draw()

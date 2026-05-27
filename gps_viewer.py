@@ -256,7 +256,7 @@ class MainWindow(QMainWindow):
 
         fm.addSeparator()
 
-        a_open_json = QAction('Ouvrir…', self)
+        a_open_json = QAction('Ouvrir un parcours…', self)
         a_open_json.setToolTip('Ouvrir un fichier de trace JSON (annotations photo)')
         a_open_json.triggered.connect(self._open_track_json)
         fm.addAction(a_open_json)
