@@ -144,8 +144,6 @@ class View3DWindow(QDialog):
         # pour que chaque frame soit calculée sans les polygones OSM
         self._canvas.mpl_connect('button_press_event',   self._on_rot_start)
         self._canvas.mpl_connect('button_release_event', self._on_rot_end)
-        # Empêcher la caméra de passer sous le plan horizontal
-        self._canvas.mpl_connect('motion_notify_event',  self._on_mouse_move)
 
         # Différer le rendu pour que la fenêtre s'affiche avant de bloquer
         QTimer.singleShot(0, self._draw)
@@ -173,15 +171,6 @@ class View3DWindow(QDialog):
         """Réaffiche la surface OSM une fois l'interaction terminée."""
         if self._map_surface is not None:
             self._map_surface.set_visible(True)
-            self._canvas.draw_idle()
-
-    def _on_mouse_move(self, event):
-        """Empêche la caméra de passer sous le plan horizontal (elev < 0)."""
-        if not self._fig.axes:
-            return
-        ax = self._fig.axes[0]
-        if hasattr(ax, 'elev') and ax.elev < 0:
-            ax.elev = 0
             self._canvas.draw_idle()
 
     # ── Slots ────────────────────────────────────────────────────────
@@ -212,6 +201,15 @@ class View3DWindow(QDialog):
 
         self._fig.clear()
         ax: Axes3D = self._fig.add_subplot(111, projection='3d')
+
+        # Empêcher la caméra de passer sous le plan horizontal :
+        # _on_move appelle view_init() — on intercepte ici pour clamer elev >= 0.
+        _orig_vi = ax.view_init
+        def _clamped_view_init(elev=None, azim=None, **kw):
+            if elev is not None:
+                elev = max(0.0, elev)
+            _orig_vi(elev=elev, azim=azim, **kw)
+        ax.view_init = _clamped_view_init
 
         # ── Style sombre ─────────────────────────────────────────────
         self._fig.patch.set_facecolor('#1a2535')
