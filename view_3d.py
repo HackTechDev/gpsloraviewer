@@ -85,9 +85,12 @@ class View3DWindow(QDialog):
         self._gps_list    = gps_list
         self._color_mode  = 'flat'   # 'flat' | 'altitude' | 'speed'
         self._show_map    = True
+        self._res_px      = 64       # résolution max de la tuile OSM (px)
         self._draw_id     = 0
         self._tile_fetcher: '_TileFetcher | None' = None
         self._map_surface = None     # référence au plot_surface OSM
+        self._raw_img     = None     # image brute (non redimensionnée) pour changement de résolution
+        self._raw_ext     = None
         # Mémorisés pour l'application différée des tuiles
         self._x_ref   = 0.0
         self._y_ref   = 0.0
@@ -124,6 +127,18 @@ class View3DWindow(QDialog):
         self._act_map.setToolTip('Afficher / masquer le fond de carte OpenStreetMap')
         self._act_map.triggered.connect(self._on_toggle_map)
         tb.addAction(self._act_map)
+
+        lbl_res = QLabel('  Résolution :')
+        lbl_res.setStyleSheet('font-size:12px; color:#555; padding:0 4px;')
+        tb.addWidget(lbl_res)
+
+        self._res_combo = QComboBox()
+        self._res_combo.addItems(['Basse (64)', 'Moyenne (128)', 'Haute (256)'])
+        self._res_combo.setCurrentIndex(0)
+        self._res_combo.setFixedWidth(120)
+        self._res_combo.setToolTip('Résolution du fond de carte OSM')
+        self._res_combo.currentIndexChanged.connect(self._on_res_changed)
+        tb.addWidget(self._res_combo)
 
         tb.addSeparator()
 
@@ -181,7 +196,16 @@ class View3DWindow(QDialog):
 
     def _on_toggle_map(self, checked: bool):
         self._show_map = checked
+        self._res_combo.setEnabled(checked)
         self._draw()
+
+    def _on_res_changed(self, idx: int):
+        self._res_px = (64, 128, 256)[idx]
+        if self._raw_img is not None and self._fig.axes:
+            if self._map_surface is not None:
+                self._map_surface.remove()
+                self._map_surface = None
+            self._apply_map_tiles(self._raw_img, self._raw_ext)
 
     def refresh(self, gps_list: list):
         """Met à jour les données et redessine."""
@@ -195,9 +219,11 @@ class View3DWindow(QDialog):
             return
 
         self._cancel_fetch()
-        self._draw_id   += 1
-        current_id       = self._draw_id
+        self._draw_id    += 1
+        current_id        = self._draw_id
         self._map_surface = None
+        self._raw_img     = None
+        self._raw_ext     = None
 
         self._fig.clear()
         ax: Axes3D = self._fig.add_subplot(111, projection='3d')
@@ -325,14 +351,19 @@ class View3DWindow(QDialog):
     def _on_tiles_ready(self, img, ext, draw_id: int):
         if draw_id != self._draw_id or img is None or not self._fig.axes:
             return
+        self._raw_img = img   # conservé pour le changement de résolution à chaud
+        self._raw_ext = ext
+        self._apply_map_tiles(img, ext)
 
+    def _apply_map_tiles(self, img: np.ndarray, ext: tuple):
+        """Redimensionne img à self._res_px et l'affiche comme plan OSM."""
+        if not self._fig.axes:
+            return
         ax = self._fig.axes[0]
 
-        # Réduction à 64 px max : 4 096 polygones suffisent pour un fond de carte
         h, w = img.shape[:2]
-        max_px = 64
-        if max(h, w) > max_px:
-            scale   = max_px / max(h, w)
+        if max(h, w) > self._res_px:
+            scale   = self._res_px / max(h, w)
             nh, nw  = max(1, int(h * scale)), max(1, int(w * scale))
             row_idx = np.linspace(0, h - 1, nh).astype(int)
             col_idx = np.linspace(0, w - 1, nw).astype(int)
