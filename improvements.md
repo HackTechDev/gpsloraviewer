@@ -5,12 +5,20 @@
 - **Export GPX / KML / GeoJSON** : permettre d'exporter la trace dans des formats standards utilisables dans d'autres outils (QGIS, Google Earth, Garmin, etc.)
 - **Import GPX** : lire directement les fichiers GPX produits par des appareils GPS commerciaux, en plus du format NMEA brut
 - ~~**Comparaison de plusieurs traces**~~ ✅ *Implémenté* : plusieurs traces NMEA simultanées avec couleurs distinctes, sauvegardées dans le fichier JSON
+- ~~**Sélecteur de trace actives pour les graphiques**~~ ✅ *Implémenté* : sélecteur `📊 Graphiques :` dans la barre d'outils pour choisir quelle trace est analysée
 - **Segmentation automatique** : détecter les pauses (vitesse nulle prolongée) et découper la trace en segments distincts avec des statistiques par segment
 
 ## Carte
 
 - **Affichage des waypoints** : marqueurs numérotés sur des points d'intérêt définis par l'utilisateur
 - **Sources de tuiles supplémentaires** : OpenTopoMap (topographie), CyclOSM (vélo), Stamen Terrain
+
+## Vue 3D
+
+- ~~**Visualisation 3D de la trace**~~ ✅ *Implémenté* : fenêtre Vue 3D (Ctrl+3) avec fond OSM, 3 modes de coloration, rotation fluide et sélecteur de résolution
+- **Extrusion du profil altimétrique** : afficher les murs verticaux sous la trace pour mieux visualiser le dénivelé
+- **Animation** : rejouer le parcours sous forme d'un point se déplaçant sur la trace en 3D
+- **Export image 3D** : sauvegarder la vue 3D courante en PNG haute résolution
 
 ## Graphiques
 
@@ -22,6 +30,8 @@
 
 ## Interface
 
+- ~~**Écran de démarrage**~~ ✅ *Implémenté* : splash screen avec logo personnalisable (`logo.png`)
+- ~~**Nouveau parcours**~~ ✅ *Implémenté* : Fichier → Nouveau parcours… (Ctrl+N) avec titre et description
 - **Mode sombre** : thème sombre pour les graphiques, le panneau et la barre d'outils
 - **Raccourcis clavier supplémentaires** : `+` / `-` pour zoomer, flèches pour pan
 - **Plein écran** : touche F11 pour passer la carte en plein écran

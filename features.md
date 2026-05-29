@@ -10,12 +10,15 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
 
 | Action | Raccourci | Description |
 |--------|-----------|-------------|
+| Nouveau parcours… | Ctrl+N | Crée un nouveau fichier JSON vide (réinitialise la session) |
 | Ouvrir… | — | Charge un fichier JSON existant (traces GPS + photos) |
 | Ajouter une trace GPS… | Ctrl+O | Ajoute une trace NMEA sur la carte courante |
 | Enregistrer | Ctrl+S | Sauvegarde dans le fichier actif |
 | Enregistrer sous… | Ctrl+Shift+S | Sauvegarde sous un nouveau nom |
+| Propriétés du parcours… | Ctrl+I | Modifier le titre et la description du parcours |
 
-- Au **démarrage**, le dernier fichier JSON utilisé est rouvert automatiquement (`~/.config/gps_viewer/last_track.txt`)
+- Au **démarrage**, un écran de démarrage (splash screen) s'affiche brièvement pendant le chargement. Un fichier `logo.png` à la racine du projet personnalise le logo.
+- Au **démarrage** sans argument, le dernier fichier JSON utilisé est rouvert automatiquement (`~/.config/gps_viewer/last_track.txt`)
 - **Fichiers récents JSON** : menu Fichier → Fichiers récents JSON (10 derniers, persistés dans `~/.config/gps_viewer/recent_tracks.json`)
 - **Glisser-déposer** d'un fichier `.txt` / `.nmea` / `.log` directement sur la fenêtre
 - **Argument en ligne de commande** : `python3 gps_viewer.py fichier.txt`
@@ -45,7 +48,7 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
 - Filtrage automatique des trames invalides (`fix_quality = 0`)
 - Chaque trace affiche un marqueur de **départ** (cercle) et d'**arrivée** (carré) dans sa couleur
 - La légende indique le nom de chaque fichier
-- Les graphiques et statistiques reflètent toujours la **dernière trace ajoutée**
+- **Sélecteur de trace** : dès que deux traces ou plus sont chargées, un sélecteur `📊 Graphiques :` apparaît dans la barre d'outils pour choisir quelle trace est analysée dans les graphiques, les statistiques et le curseur carte
 
 ## Carte
 
@@ -134,6 +137,28 @@ Affiché en permanence à droite de la carte :
 - Sélecteur de niveau de zoom (1 à 19)
 - Un repère rouge est affiché à la position choisie
 - Zoom, pan et changement de couche restent fonctionnels après navigation
+
+## Vue 3D (Ctrl+3)
+
+Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées en trois dimensions.
+
+- Axes **Est / Nord** en mètres (coordonnées Web Mercator centrées sur le centroïde), axe **Altitude** en mètres
+- Marqueurs départ (●) et arrivée (■) pour chaque trace
+- Trois **modes de coloration** :
+
+| Mode | Description |
+|------|-------------|
+| Couleur unie | Couleur fixe par trace (palette cyclique) |
+| 🏔 Altitude | Gradient de couleur selon l'altitude (colorbar affichée) |
+| ⚡ Vitesse | Gradient de couleur selon la vitesse (colorbar affichée) |
+
+- **Fond de carte OSM** : tuiles OpenStreetMap affichées comme plan horizontal à la base de la scène, téléchargées en arrière-plan (`QThread`) sans bloquer l'interface
+  - Bouton toggle `🗺 Fond OSM` pour afficher / masquer
+  - **Sélecteur de résolution** : Basse (64 px / 4 096 polygones), Moyenne (128 px), Haute (256 px) — le changement de résolution est instantané (rééchantillonnage depuis l'image brute mise en cache, sans re-téléchargement)
+  - La surface OSM est automatiquement masquée pendant la rotation pour garantir la fluidité, et réaffichée au relâchement
+- **Rotation fluide** : la caméra ne peut pas passer sous le plan horizontal (élévation clampée à ≥ 0°)
+- Bouton `⌂ Réinitialiser la vue` pour revenir à l'angle par défaut (élev 25°, azim −60°)
+- La fenêtre se met à jour automatiquement lors de l'ajout d'une nouvelle trace
 
 ## Performances
 
