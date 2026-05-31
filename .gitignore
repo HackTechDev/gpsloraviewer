@@ -1,7 +1,7 @@
 __pycache__/
-tracks/
-tracks/images/
-tracks/track.json
+gps_viewer/tracks/
+gps_viewer/tracks/images/
+gps_viewer/tracks/track.json
 
 # Traces GPS brutes
-GPS*.txt
+gps_viewer/tracks/gps/GPS*.txt
