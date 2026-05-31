@@ -42,7 +42,7 @@ _RECENT_FILE      = _CONFIG_DIR / 'recent_tracks.json'
 _LAST_TRACK_FILE  = _CONFIG_DIR / 'last_track.txt'
 _MAX_RECENT       = 10
 
-_TRACKS_DIR     = Path('tracks')
+_TRACKS_DIR     = Path(__file__).parent / 'tracks'
 _TRACKS_IMG_DIR = _TRACKS_DIR / 'images'
 _TRACKS_JSON    = _TRACKS_DIR / 'track.json'
 

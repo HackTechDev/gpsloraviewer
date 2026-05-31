@@ -14,14 +14,14 @@ gpslora/
 │   ├── stats_panel.py             #   Panneau de statistiques
 │   ├── dialogs.py                 #   Boîtes de dialogue
 │   ├── view_3d.py                 #   Vue 3D (matplotlib 3D + OSM)
-│   └── gps_map.py                 #   Générateur carte HTML (Folium)
+│   ├── gps_map.py                 #   Générateur carte HTML (Folium)
+│   └── tracks/                    #   Fichiers JSON de parcours + photos
 ├── gps_lora_logger/               # Firmware Arduino
 │   ├── gps_lora_logger.ino        #   Émetteur terrain (SD + LoRa TX)
 │   ├── rf95_server/
 │   │   └── rf95_server.ino        #   Récepteur base (LoRa RX → Serial USB)
 │   └── rf95_client/
 │       └── rf95_client.ino        #   Client LoRa de référence (RadioHead)
-├── tracks/                        # Fichiers JSON de parcours + photos
 ├── exemples/                      # Exemples de sketches Arduino
 ├── runGPSLoRa.sh                  # Lanceur (Linux/macOS)
 ├── features.md                    # Description détaillée des fonctionnalités
