@@ -1,217 +1,166 @@
-# GPS Viewer
+# GPS LoRa
 
-Application desktop de visualisation de traces GPS enregistrées depuis un module GPS via Arduino.
+Système complet de suivi GPS : acquisition sur le terrain via Arduino, transmission LoRa en temps réel, et visualisation desktop PyQt5.
 
 ## Architecture du projet
 
 ```
 gpslora/
-├── gps_datalogger/
-│   └── gps_datalogger.ino   # Sketch Arduino : lecture GPS + enregistrement SD
-├── gps_viewer.py            # Application desktop PyQt5 (carte + graphiques)
-├── gps_map.py               # Générateur de carte HTML (Folium + Chart.js)
-├── GPS02.txt                # Exemple de fichier NMEA enregistré
-├── exemples/                # Exemples de traces GPS
-└── tracks/
-    └── images/              # Miniatures et copies des photos annotées
+├── gps_viewer/                    # Application desktop PyQt5
+│   ├── gps_viewer.py              #   Point d'entrée principal
+│   ├── gps_nmea.py                #   Parseur NMEA
+│   ├── map_canvas.py              #   Widget carte (matplotlib + contextily)
+│   ├── chart_canvas.py            #   Widget graphiques
+│   ├── stats_panel.py             #   Panneau de statistiques
+│   ├── dialogs.py                 #   Boîtes de dialogue
+│   ├── view_3d.py                 #   Vue 3D (matplotlib 3D + OSM)
+│   └── gps_map.py                 #   Générateur carte HTML (Folium)
+├── gps_lora_logger/               # Firmware Arduino
+│   ├── gps_lora_logger.ino        #   Émetteur terrain (SD + LoRa TX)
+│   ├── rf95_server/
+│   │   └── rf95_server.ino        #   Récepteur base (LoRa RX → Serial USB)
+│   └── rf95_client/
+│       └── rf95_client.ino        #   Client LoRa de référence (RadioHead)
+├── tracks/                        # Fichiers JSON de parcours + photos
+├── exemples/                      # Exemples de sketches Arduino
+├── runGPSLoRa.sh                  # Lanceur (Linux/macOS)
+├── features.md                    # Description détaillée des fonctionnalités
+├── improvements.md                # Pistes d'amélioration
+└── user_guide.md                  # Guide utilisateur
 ```
 
-## Matériel requis (Arduino)
+## Démarrage rapide
+
+### Lancer l'application
+
+```bash
+./runGPSLoRa.sh
+# ou
+python3 gps_viewer/gps_viewer.py
+# ou avec un fichier JSON directement :
+python3 gps_viewer/gps_viewer.py session.json
+```
+
+### Dépendances Python
+
+```bash
+pip install PyQt5 matplotlib contextily numpy Pillow folium
+```
+
+---
+
+## Système d'acquisition Arduino (`gps_lora_logger/`)
+
+### Émetteur terrain — `gps_lora_logger.ino`
+
+À flasher sur l'**Arduino terrain** (avec GPS + SD + module LoRa).
 
 | Composant | Connexion |
 |-----------|-----------|
-| Module GPS | TX → pin 2, RX → pin 3, VCC → 3.3 V/5 V, GND → GND |
-| Carte SD (SPI) | CS → pin SS (10), MOSI → 11, MISO → 12, SCK → 13 |
-| LED | Pin 13 (LED_BUILTIN) — indicateur d'état |
+| GPS TX | Pin 2 (RX) |
+| GPS RX | Pin 3 (TX) |
+| LoRa TX | Pin 5 (RX) |
+| LoRa RX | Pin 6 (TX) |
+| SD CS | Pin 10 (SS) |
+| SD MOSI/MISO/SCK | Pins 11 / 12 / 13 |
 
-**Bibliothèque Arduino requise :** SdFat (Bill Greiman)
+**Bibliothèques :** SdFat (Bill Greiman), RadioHead (Mike McCaulay)
 
-### Comportement de la LED
+- Enregistre **toutes** les trames NMEA sur SD (`GPS00.txt` → `GPS99.txt`)
+- Transmet les trames `$GPRMC` via LoRa toutes les 10 s (duty cycle EU 1 %)
+- Fonctionne en mode SD seul si le module LoRa est absent
 
-| Signal | Signification |
-|--------|---------------|
-| Clignotement rapide | Initialisation SD en cours |
-| Clignotement lent | Enregistrement en cours (OK) |
-| Allumée fixe | Erreur SD |
+**LED (pin 13) :** clignote rapidement (init) · lentement (OK) · fixe (erreur SD)
 
-Les fichiers sont créés automatiquement sous la forme `GPS00.txt` à `GPS99.txt`.
+### Récepteur base — `rf95_server/rf95_server.ino`
 
-## Installation Python
+À flasher sur un **Arduino dédié** connecté au PC.
 
-```bash
-pip install PyQt5 matplotlib contextily numpy
-```
+| Composant | Connexion (AVR) |
+|-----------|-----------------|
+| LoRa TX | Pin 10 (RX) |
+| LoRa RX | Pin 11 (TX) |
 
-## Utilisation
+- Reçoit les trames LoRa et les relaie vers le port Serial USB (115 200 baud)
+- Affiche le RSSI sur des lignes `#` (ignorées par les parseurs NMEA)
 
-### Enregistrement (Arduino)
+**LED (pin 13) :** flash 50 ms à chaque trame reçue
 
-1. Téléverser `gps_datalogger.ino` sur l'Arduino
-2. Insérer la carte SD
-3. Connecter le module GPS
-4. L'enregistrement démarre automatiquement
+---
 
-### Visualisation desktop
+## Application desktop (`gps_viewer/`)
 
-```bash
-python3 gps_viewer.py
-# ou avec un fichier JSON directement :
-python3 gps_viewer.py session.json
-```
+### Carte interactive
 
-Au démarrage sans argument, le dernier fichier JSON utilisé est rouvert automatiquement.
+- Traces GPS multi-fichiers sur fond de carte (OpenStreetMap, Satellite Esri, IGN)
+- Zoom molette, pan, recentrage `⌂` (Ctrl+R)
+- Coloration de la trace : couleur unie / altitude / vitesse (gradients + colorbar)
+- Grille de coordonnées (Ctrl+L), miniature de localisation (Ctrl+M)
+- Outil de mesure de distance clic-à-clic (Ctrl+D)
 
-### Visualisation HTML
+### Vue 3D (Ctrl+3)
 
-```bash
-python3 gps_map.py GPS02.txt
-# Ouvre GPS02_map.html dans le navigateur par défaut
-```
+- Traces GPS en 3D (axes Est / Nord / Altitude)
+- Fond de carte OSM comme plan horizontal (téléchargement asynchrone)
+- Sélecteur de résolution : Basse (64 px) / Moyenne (128 px) / Haute (256 px)
+- Caméra bloquée au-dessus du plan horizontal
 
-## Fichier de trace JSON
+### Annotations photo
 
-Le fichier `.json` est le document central de l'application. Il regroupe les chemins vers une ou plusieurs traces GPS NMEA et toutes les annotations photo.
+- Clic sur la carte → ajout d'une photo géolocalisée avec miniature, titre, description
+- Visionneuse plein format, indicateur de direction orientable
+
+### Graphiques et statistiques
+
+- Profil altimétrique et profil de vitesse synchronisés avec la carte
+- Panneau de statistiques : distance, durée, altitude, vitesse
+- Bloc curseur temps réel au survol des graphiques
+
+### Fichier de trace JSON
 
 ```json
 {
-  "gps_files": ["/chemin/absolu/GPS01.txt", "/chemin/absolu/GPS02.txt"],
+  "gps_files": ["/chemin/absolu/GPS01.txt"],
   "photos": [
     {
       "lat": 48.123456, "lon": 7.654321,
       "file": "tracks/images/photo_001.jpg",
       "thumb": "tracks/images/photo_001_thumb.jpg",
-      "titre": "Titre optionnel",
-      "description": "Description optionnelle",
-      "angle": 90.0
+      "titre": "Titre", "description": "...", "angle": 90.0
     }
   ]
 }
 ```
 
-**Opérations disponibles (menu Fichier) :**
-
-| Action | Raccourci | Description |
-|--------|-----------|-------------|
-| Ouvrir… | — | Charge un fichier JSON existant |
-| Ajouter une trace GPS… | Ctrl+O | Ajoute une trace NMEA sur la carte courante |
-| Enregistrer | Ctrl+S | Sauvegarde dans le fichier actif |
-| Enregistrer sous… | Ctrl+Shift+S | Sauvegarde sous un nouveau nom |
-| Fichiers récents JSON | — | 10 derniers fichiers JSON utilisés |
-
-La barre de titre affiche : `GPS Viewer  [nom.json] — fichier.txt` (ou `— N traces GPS` si plusieurs).
-
-## Fonctionnalités principales
-
-### Traces GPS multiples
-
-- **Plusieurs traces simultanées** : chaque fichier NMEA est affiché avec une couleur distincte (palette de 8 couleurs cycliques)
-- Filtrage automatique des trames invalides (`fix_quality = 0`)
-- Chaque trace affiche un marqueur de départ (cercle) et d'arrivée (carré) dans sa couleur
-- Légende avec le nom de chaque fichier
-- Les graphiques et statistiques reflètent la dernière trace ajoutée
-
-### Carte interactive
-
-- Trace GPS sur fond de carte rendu nativement (matplotlib + contextily)
-- Zoom à la molette, pan par clic-glisser, recentrage `⌂` (Ctrl+R)
-
-**Fonds de carte disponibles :**
-
-| Source | Description |
-|--------|-------------|
-| OpenStreetMap | Carte standard (défaut) |
-| Satellite Esri | Vue satellite mondiale |
-| Orthophoto IGN | Photographies aériennes IGN France |
-| Plan IGN | Cartographie topographique IGN France |
-
-**Coloration de la trace :**
-
-| Mode | Description |
-|------|-------------|
-| Couleur unie | Couleur de palette par trace (défaut) |
-| Altitude | Gradient bleu → vert → jaune → rouge |
-| Vitesse | Gradient vert → orange → rouge |
-
-### Outils cartographiques
-
-- **Grille de coordonnées** (Ctrl+L) : quadrillage lat/lon adaptatif avec étiquettes
-- **Miniature de localisation** (Ctrl+M) : vue d'ensemble avec rectangle de position courante
-- **Mesure de distance** (Ctrl+D) : outil clic-à-clic
-  - Ligne rubber-band animée entre deux clics avec distance live
-  - Double-clic pour figer la mesure et démarrer une nouvelle
-  - Plusieurs mesures simultanées ; Échap pour tout effacer
-
-### Annotations photo
-
-- **Mode photo** : bouton `📷 Photo` ou touche `P` — curseur croix
-- Clic sur la carte → sélecteur de fichier image (JPG, PNG, BMP, GIF, TIFF, WebP)
-- L'image est copiée dans `tracks/images/`, une miniature 80×80 px est générée
-- Chaque annotation affiche une croix rouge et la miniature reliée par une flèche
-- **Clic sur la croix ou la miniature** → visionneuse plein format avec titre, description éditables et bouton Supprimer
-- **Indicateur de direction** (œil) : survoler une annotation puis `V` (afficher/masquer), `W` (+15°), `X` (−15°)
-
-### Navigation par coordonnées
-
-- Menu Navigation → Aller aux coordonnées… (Ctrl+G) ou bouton `📍 Coordonnées`
-- Saisie latitude/longitude, sélecteur de niveau de zoom, repère rouge affiché
-
-### Graphiques synchronisés
-
-- Profil altimétrique (altitude vs distance)
-- Profil de vitesse (km/h, lissé sur 5 points)
-- Curseur rouge synchronisé entre la carte et les graphiques
-
-### Panneau de statistiques
-
-Distance totale, durée, altitude min/max/moy, vitesse max/moy. Bloc curseur en temps réel au survol des graphiques.
-
-## Raccourcis clavier
+### Raccourcis clavier
 
 | Raccourci | Action |
 |-----------|--------|
+| Ctrl+N | Nouveau parcours |
 | Ctrl+O | Ajouter une trace GPS |
-| Ctrl+S | Enregistrer le fichier JSON |
+| Ctrl+S | Enregistrer |
 | Ctrl+Shift+S | Enregistrer sous… |
+| Ctrl+I | Propriétés du parcours |
 | Ctrl+R | Recentrer sur la trace |
-| Ctrl+L | Afficher/masquer la grille de coordonnées |
-| Ctrl+M | Afficher/masquer la miniature |
-| Ctrl+D | Activer/désactiver l'outil de mesure |
+| Ctrl+L | Grille de coordonnées |
+| Ctrl+M | Miniature de localisation |
+| Ctrl+D | Outil de mesure |
 | Ctrl+G | Naviguer vers des coordonnées |
-| P | Activer/désactiver le mode photo |
-| V | Afficher/masquer l'indicateur de direction (œil) |
-| W | Tourner l'indicateur de +15° |
-| X | Tourner l'indicateur de −15° |
-| Échap | Effacer toutes les mesures |
+| Ctrl+3 | Vue 3D |
+| P | Mode annotation photo |
+| Échap | Effacer les mesures |
 
-## Performances
-
-- Chargement asynchrone des tuiles (QThread) — la trace est visible immédiatement
-- Barre de progression pulsée pendant le téléchargement
-- Cache LRU en mémoire (20 vues) pour des aller-retours instantanés
-- Zoom adaptatif : niveau OSM calculé depuis l'étendue de la vue
-- Simplification Douglas-Peucker (ε ≈ 1,5 px) pour les traces ≥ 500 points
-
-## Cache de tuiles
-
-Les tuiles sont stockées dans `~/.cache/gps_viewer/tiles/` entre les sessions.
-
-- **Outils → Informations sur le cache** : chemin, taille (Mo), nombre de fichiers
-- **Outils → Vider le cache** : suppression avec confirmation
-
-## Fichiers de configuration
+### Fichiers de configuration
 
 | Fichier | Contenu |
 |---------|---------|
-| `~/.config/gps_viewer/last_track.txt` | Chemin du dernier fichier JSON ouvert |
-| `~/.config/gps_viewer/recent_tracks.json` | Liste des 10 derniers fichiers JSON |
-| `~/.cache/gps_viewer/tiles/` | Cache persistant des tuiles cartographiques |
+| `~/.config/gps_viewer/last_track.txt` | Dernier fichier JSON ouvert |
+| `~/.config/gps_viewer/recent_tracks.json` | 10 derniers fichiers JSON |
+| `~/.cache/gps_viewer/tiles/` | Cache persistant des tuiles |
 
-## Format de fichier GPS
+### Visualisation HTML
 
-Les fichiers `.txt` contiennent des trames NMEA brutes, notamment les trames `$GPGGA` :
-
+```bash
+python3 gps_viewer/gps_map.py GPS02.txt
+# Génère GPS02_map.html et l'ouvre dans le navigateur
 ```
-$GPGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*47
-```
-
-Seules les trames `$GPGGA` avec `fix_quality > 0` sont utilisées.
