@@ -17,11 +17,11 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
 | Enregistrer sous… | Ctrl+Shift+S | Sauvegarde sous un nouveau nom |
 | Propriétés du parcours… | Ctrl+I | Modifier le titre et la description du parcours |
 
-- Au **démarrage**, un écran de démarrage (splash screen) s'affiche brièvement pendant le chargement. Un fichier `logo.png` à la racine du projet personnalise le logo.
+- Au **démarrage**, un écran de démarrage (splash screen) s'affiche brièvement pendant le chargement. Un fichier `logo.png` dans le dossier `gps_viewer/` personnalise le logo.
 - Au **démarrage** sans argument, le dernier fichier JSON utilisé est rouvert automatiquement (`~/.config/gps_viewer/last_track.txt`)
 - **Fichiers récents JSON** : menu Fichier → Fichiers récents JSON (10 derniers, persistés dans `~/.config/gps_viewer/recent_tracks.json`)
 - **Glisser-déposer** d'un fichier `.txt` / `.nmea` / `.log` directement sur la fenêtre
-- **Argument en ligne de commande** : `python3 gps_viewer.py fichier.txt`
+- **Argument en ligne de commande** : `python3 gps_viewer/gps_viewer.py fichier.txt`
 - La barre de titre indique : `GPS Viewer  [nom.json] — fichier.txt`
 
 ### Format JSON
@@ -95,7 +95,7 @@ Une colorbar est affichée en incrustation pour les modes dégradés.
 
 - **Mode photo** : bouton `📷 Photo` ou touche `P` — le curseur devient une croix
 - Clic sur la carte → sélecteur de fichier image (JPG, PNG, BMP, GIF, TIFF, WebP)
-- L'image originale est copiée dans `tracks/images/`, une miniature 80×80 px est générée
+- L'image originale est copiée dans `gps_viewer/tracks/images/`, une miniature 80×80 px est générée
 - Chaque annotation affiche une croix rouge et la miniature reliée par une flèche
 - **Clic sur la croix ou la miniature** → visionneuse plein format avec :
   - Affichage de l'image (jusqu'à 90 % de l'écran)
