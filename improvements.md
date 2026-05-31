@@ -38,7 +38,7 @@
 - **Affichage OLED** : petit écran 128×32 affichant la position courante, la vitesse et l'état de la SD en temps réel
 - **Bouton pause/reprise** : permettre de stopper l'enregistrement sans couper l'alimentation
 - **Batterie et gestion d'énergie** : mode veille entre les trames pour réduire la consommation lors d'un usage sur batterie
-- ~~**Transmission LoRa**~~ ✅ Implémenté — SF12 (Bw125Cr48Sf4096), 434 MHz, portée ~6–15 km, 1 envoi toutes les 8 min (duty cycle EU433 < 1 %)
+- ~~**Transmission LoRa**~~ ✅ Implémenté — SF7 (défaut RadioHead), 434 MHz, portée ~2–5 km, 1 envoi toutes les 10 s (duty cycle EU433 < 1 %)
 
 ## Récepteur LoRa / Intégration PC
 

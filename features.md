@@ -191,9 +191,9 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - Enregistrement de **toutes** les trames sur carte SD via SdFat (CS = pin SS)
 - Nommage automatique des fichiers : `GPS00.txt` → `GPS99.txt`
 - Synchronisation SD à chaque trame pour éviter les pertes en cas de coupure
-- **Transmission LoRa** : envoi des trames `$GPRMC`/`$GNRMC` via RadioHead RH_RF95 (SoftwareSerial pins 5/6, 434 MHz, SF12)
-  - Portée estimée : 6–15 km (SF12, BW=125 kHz, 13 dBm)
-  - Rate limiting 8 min entre deux envois — SF12 génère ~4,6 s d'airtime, duty cycle EU433 < 1 %
+- **Transmission LoRa** : envoi des trames `$GPRMC`/`$GNRMC` via RadioHead RH_RF95 (SoftwareSerial pins 5/6, 434 MHz, SF7)
+  - Portée estimée : 2–5 km (SF7, BW=125 kHz, 13 dBm)
+  - Rate limiting 10 s entre deux envois — airtime ~70 ms, duty cycle EU433 < 1 %
   - Filtrage : seules les trames de position sont transmises, toutes sont écrites sur SD
   - Dégradation gracieuse : si le module LoRa est absent, l'enregistrement SD continue normalement
 - Indicateur LED : clignotement rapide (init), lent (enregistrement OK), fixe (erreur SD)
