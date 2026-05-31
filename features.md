@@ -28,12 +28,12 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
 
 ```json
 {
-  "gps_files": ["/chemin/absolu/GPS01.txt", "/chemin/absolu/GPS02.txt"],
+  "gps_files": ["/chemin/absolu/gps_viewer/tracks/gps/GPS01.txt"],
   "photos": [
     {
       "lat": 48.123456, "lon": 7.654321,
-      "file": "tracks/images/photo_20250101_001.jpg",
-      "thumb": "tracks/images/photo_20250101_001_thumb.jpg",
+      "file": "/chemin/absolu/gps_viewer/tracks/images/photo_20250101_001.jpg",
+      "thumb": "/chemin/absolu/gps_viewer/tracks/images/photo_20250101_001_thumb.jpg",
       "titre": "Titre optionnel",
       "description": "Description optionnelle",
       "angle": 90.0
@@ -175,7 +175,7 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - **Outils → Informations sur le cache** : chemin, taille (Mo), nombre de fichiers
 - **Outils → Vider le cache** : suppression avec confirmation et affichage de la taille libérée
 
-## Visualisation HTML (gps_map.py)
+## Visualisation HTML (gps_viewer/gps_map.py)
 
 - Génère une page HTML autonome avec Folium (Leaflet.js)
 - Trace GPS colorée sur OpenStreetMap
