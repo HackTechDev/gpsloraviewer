@@ -70,7 +70,7 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium
 **Bibliothèques :** SdFat (Bill Greiman), RadioHead (Mike McCaulay)
 
 - Enregistre **toutes** les trames NMEA sur SD (`GPS00.txt` → `GPS99.txt`)
-- Transmet les trames `$GPRMC` via LoRa toutes les 10 s (duty cycle EU 1 %)
+- Transmet les trames `$GPRMC` via LoRa toutes les **8 min** — SF12 (Bw125Cr48Sf4096), portée ~6–15 km, airtime ~4,6 s, duty cycle EU433 < 1 %
 - Fonctionne en mode SD seul si le module LoRa est absent
 
 **LED (pin 13) :** clignote rapidement (init) · lentement (OK) · fixe (erreur SD)
