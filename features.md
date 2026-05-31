@@ -183,11 +183,26 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - Curseur synchronisé entre la carte et les graphiques au survol
 - Panneau d'informations résumant les statistiques du parcours
 
-## Enregistreur Arduino (gps_datalogger.ino)
+## Système d'acquisition Arduino (`gps_lora_logger/`)
+
+### Émetteur terrain (`gps_lora_logger.ino`)
 
 - Lecture des trames NMEA via SoftwareSerial (pins 2/3, 9600 baud)
-- Enregistrement sur carte SD via SdFat (CS = pin SS)
+- Enregistrement de **toutes** les trames sur carte SD via SdFat (CS = pin SS)
 - Nommage automatique des fichiers : `GPS00.txt` → `GPS99.txt`
 - Synchronisation SD à chaque trame pour éviter les pertes en cas de coupure
-- Indicateur LED : clignotement rapide (init), lent (OK), fixe (erreur)
+- **Transmission LoRa** : envoi des trames `$GPRMC`/`$GNRMC` via RadioHead RH_RF95 (SoftwareSerial pins 5/6, 434 MHz)
+  - Rate limiting 10 s entre deux envois (conformité duty cycle EU 1 %)
+  - Filtrage : seules les trames de position sont transmises, toutes sont écrites sur SD
+  - Dégradation gracieuse : si le module LoRa est absent, l'enregistrement SD continue normalement
+- Indicateur LED : clignotement rapide (init), lent (enregistrement OK), fixe (erreur SD)
 - Écho des trames sur le port série USB pour surveillance en temps réel
+
+### Récepteur base (`rf95_server/rf95_server.ino`)
+
+- À flasher sur un **Arduino dédié** (distinct de l'émetteur terrain)
+- Reçoit les trames LoRa et les relaie vers le port Serial USB (115200 baud)
+- Validation minimale : seuls les paquets commençant par `$` sont relayés
+- Affiche le RSSI et un compteur de paquets sur des lignes `#` (ignorées par les parseurs NMEA)
+- Compatible multi-plateformes : AVR, RP2040, ESP32, SAMD, STM32, nRF52840
+- Indicateur LED : flash 50 ms à chaque trame reçue

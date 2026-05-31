@@ -38,7 +38,13 @@
 - **Affichage OLED** : petit écran 128×32 affichant la position courante, la vitesse et l'état de la SD en temps réel
 - **Bouton pause/reprise** : permettre de stopper l'enregistrement sans couper l'alimentation
 - **Batterie et gestion d'énergie** : mode veille entre les trames pour réduire la consommation lors d'un usage sur batterie
-- **Transmission LoRa** : envoi des coordonnées en temps réel via un module LoRa (Ra-02) pour suivi à distance
+- ~~**Transmission LoRa**~~ ✅ Implémenté — envoi des trames `$GPRMC` via RadioHead RH_RF95, rate-limité à 10 s (duty cycle EU)
+
+## Récepteur LoRa / Intégration PC
+
+- **Réception temps réel dans GPS Viewer** : lire le port Serial USB du récepteur (`rf95_server`) directement depuis `gps_viewer.py` pour afficher la position live sur la carte
+- **ACK et qualité de liaison** : afficher le RSSI dans l'interface pour évaluer la portée LoRa en temps réel
+- **Rejeu différé** : détecter automatiquement les fichiers `GPS*.txt` produits par l'émetteur terrain et les proposer à l'ouverture
 
 ## Réseau et partage
 
