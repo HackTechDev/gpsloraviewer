@@ -67,7 +67,18 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium
 | SD CS | Pin 10 (SS) |
 | SD MOSI/MISO/SCK | Pins 11 / 12 / 13 |
 
-**Bibliothèques :** SdFat (Bill Greiman), RadioHead (Mike McCaulay)
+**Bibliothèques :** SdFat (Bill Greiman), RadioHead — version patchée fournie dans `gps_lora_logger/lib/Grove_LoRa_Radio/`
+
+> **Installation de la bibliothèque RadioHead patchée**
+>
+> La version originale de la bibliothèque Grove LoRa (`Grove_-_LoRa_Radio_433MHz_868MHz`) ne compile pas sur AVR (Uno/Nano) en raison d'une incompatibilité de `stdatomic.h` avec avr-g++. Une version corrigée est incluse dans ce dépôt.
+>
+> Copier le dossier dans le répertoire des bibliothèques Arduino :
+> ```bash
+> cp -r gps_lora_logger/lib/Grove_LoRa_Radio \
+>       ~/Arduino/libraries/Grove_-_LoRa_Radio_433MHz_868MHz
+> ```
+> **Correctif appliqué** (`RadioHead.h`, ligne ~818) : ajout d'une garde `#elif defined(__AVR__)` pour utiliser `<util/atomic.h>` (avr-libc) au lieu de `<stdatomic.h>` (C11, non supporté par avr-g++ en mode C++).
 
 - Enregistre **toutes** les trames NMEA sur SD (`GPS00.txt` → `GPS99.txt`)
 - Transmet les trames `$GPRMC` via LoRa toutes les **10 s** — SF7 (défaut RadioHead), airtime ~70 ms, duty cycle EU433 < 1 %
