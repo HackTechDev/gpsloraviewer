@@ -15,7 +15,10 @@ gpslora/
 │   ├── dialogs.py                 #   Boîtes de dialogue
 │   ├── view_3d.py                 #   Vue 3D (matplotlib 3D + OSM)
 │   ├── gps_map.py                 #   Générateur carte HTML (Folium)
-│   └── tracks/                    #   Fichiers JSON de parcours + photos
+│   └── tracks/                    #   Données utilisateur (non versionnées)
+│       ├── gps/                   #     Traces NMEA brutes (GPS00.txt…)
+│       ├── images/                #     Photos annotées + miniatures
+│       └── *.json                 #     Fichiers de parcours
 ├── gps_lora_logger/               # Firmware Arduino
 │   ├── gps_lora_logger.ino        #   Émetteur terrain (SD + LoRa TX)
 │   ├── rf95_server/
@@ -120,12 +123,12 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium
 
 ```json
 {
-  "gps_files": ["/chemin/absolu/GPS01.txt"],
+  "gps_files": ["/chemin/absolu/gps_viewer/tracks/gps/GPS01.txt"],
   "photos": [
     {
       "lat": 48.123456, "lon": 7.654321,
-      "file": "tracks/images/photo_001.jpg",
-      "thumb": "tracks/images/photo_001_thumb.jpg",
+      "file": "/chemin/absolu/gps_viewer/tracks/images/photo_001.jpg",
+      "thumb": "/chemin/absolu/gps_viewer/tracks/images/photo_001_thumb.jpg",
       "titre": "Titre", "description": "...", "angle": 90.0
     }
   ]
@@ -161,6 +164,6 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium
 ### Visualisation HTML
 
 ```bash
-python3 gps_viewer/gps_map.py GPS02.txt
+python3 gps_viewer/gps_map.py gps_viewer/tracks/gps/GPS02.txt
 # Génère GPS02_map.html et l'ouvre dans le navigateur
 ```
