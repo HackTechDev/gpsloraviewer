@@ -207,3 +207,26 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - Affiche le RSSI et un compteur de paquets sur des lignes `#` (ignorées par les parseurs NMEA)
 - Compatible multi-plateformes : AVR, RP2040, ESP32, SAMD, STM32, nRF52840
 - Indicateur LED : flash 50 ms à chaque trame reçue
+
+### Script de réception PC (`gps_viewer/lora_receiver.py`)
+
+- Lit le port série de l'Arduino récepteur (115 200 baud) via **pyserial**
+- Détecte automatiquement le port `/dev/ttyUSB*` ou `/dev/ttyACM*`
+- Affiche toutes les lignes en temps réel (trames NMEA + diagnostics RSSI `#`)
+- Écrit uniquement les trames NMEA (`$GPRMC`…) dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
+- `flush()` à chaque trame — le fichier est lisible en direct dans GPS Viewer
+- Ctrl+C arrête proprement et affiche le nombre de trames enregistrées
+- Dépendance : `pip install pyserial`
+
+### Bibliothèque RadioHead patchée (`gps_lora_logger/lib/Grove_LoRa_Radio/`)
+
+La bibliothèque Grove LoRa originale ne compile pas sur AVR (Uno/Nano) : `stdatomic.h` incompatible avec avr-g++ en mode C++. Une version corrigée est versionnée dans le dépôt.
+
+Correctif appliqué dans `RadioHead.h` (~ligne 818) :
+- Ajout de `#elif defined(__AVR__)` → utilise `<util/atomic.h>` (avr-libc) au lieu de `<stdatomic.h>`
+
+Installation :
+```bash
+cp -r gps_lora_logger/lib/Grove_LoRa_Radio \
+      ~/Arduino/libraries/Grove_-_LoRa_Radio_433MHz_868MHz
+```

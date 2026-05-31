@@ -42,9 +42,10 @@
 
 ## Récepteur LoRa / Intégration PC
 
-- **Réception temps réel dans GPS Viewer** : lire le port Serial USB du récepteur (`rf95_server`) directement depuis `gps_viewer.py` pour afficher la position live sur la carte
-- **ACK et qualité de liaison** : afficher le RSSI dans l'interface pour évaluer la portée LoRa en temps réel
-- **Rejeu différé** : détecter automatiquement les fichiers `GPS*.txt` produits par l'émetteur terrain et les proposer à l'ouverture
+- ~~**Script de réception PC**~~ ✅ Implémenté — `lora_receiver.py` lit le port série, écrit les trames NMEA dans `tracks/gps/LORA_*.txt`, lisible dans GPS Viewer
+- **Réception temps réel dans GPS Viewer** : intégrer `lora_receiver.py` directement dans `gps_viewer.py` pour afficher la position live sur la carte sans fichier intermédiaire
+- **ACK et qualité de liaison** : afficher le RSSI reçu dans l'interface GPS Viewer
+- **Rejeu différé** : détecter automatiquement les fichiers `LORA_*.txt` dans `tracks/gps/` et les proposer à l'ouverture
 
 ## Réseau et partage
 

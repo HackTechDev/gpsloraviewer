@@ -15,16 +15,19 @@ gpslora/
 │   ├── dialogs.py                 #   Boîtes de dialogue
 │   ├── view_3d.py                 #   Vue 3D (matplotlib 3D + OSM)
 │   ├── gps_map.py                 #   Générateur carte HTML (Folium)
+│   ├── lora_receiver.py           #   Réception LoRa → fichier NMEA (pyserial)
 │   └── tracks/                    #   Données utilisateur (non versionnées)
-│       ├── gps/                   #     Traces NMEA brutes (GPS00.txt…)
+│       ├── gps/                   #     Traces NMEA brutes (GPS00.txt… LORA_*.txt)
 │       ├── images/                #     Photos annotées + miniatures
 │       └── *.json                 #     Fichiers de parcours
 ├── gps_lora_logger/               # Firmware Arduino
 │   ├── gps_lora_logger.ino        #   Émetteur terrain (SD + LoRa TX)
 │   ├── rf95_server/
 │   │   └── rf95_server.ino        #   Récepteur base (LoRa RX → Serial USB)
-│   └── rf95_client/
-│       └── rf95_client.ino        #   Client LoRa de référence (RadioHead)
+│   ├── rf95_client/
+│   │   └── rf95_client.ino        #   Client LoRa de référence (RadioHead)
+│   └── lib/
+│       └── Grove_LoRa_Radio/      #   Bibliothèque RadioHead patchée (AVR fix)
 ├── exemples/                      # Exemples de sketches Arduino
 ├── runGPSLoRa.sh                  # Lanceur (Linux/macOS)
 ├── features.md                    # Description détaillée des fonctionnalités
@@ -47,7 +50,7 @@ python3 gps_viewer/gps_viewer.py session.json
 ### Dépendances Python
 
 ```bash
-pip install PyQt5 matplotlib contextily numpy Pillow folium
+pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
 ```
 
 ---
@@ -99,6 +102,21 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium
 - Affiche le RSSI sur des lignes `#` (ignorées par les parseurs NMEA)
 
 **LED (pin 13) :** flash 50 ms à chaque trame reçue
+
+### Réception PC — `lora_receiver.py`
+
+Script Python à lancer sur le PC pour lire le port série du récepteur et enregistrer les trames dans un fichier exploitable par GPS Viewer.
+
+```bash
+python3 gps_viewer/lora_receiver.py                        # port auto-détecté
+python3 gps_viewer/lora_receiver.py --port /dev/ttyUSB0    # port explicite
+```
+
+- Détecte automatiquement `/dev/ttyUSB*` ou `/dev/ttyACM*`
+- Affiche toutes les lignes en temps réel (trames NMEA + diagnostics RSSI)
+- Écrit uniquement les trames `$GPRMC` dans `gps_viewer/tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
+- Le fichier est utilisable directement dans GPS Viewer
+- Ctrl+C pour arrêter proprement
 
 ---
 
