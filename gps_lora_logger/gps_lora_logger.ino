@@ -57,11 +57,12 @@
 #define LORA_RX_PIN      5
 #define LORA_TX_PIN      6
 #define LORA_BAUD        9600
-#define LORA_FREQ        434.0   // MHz — adapter à votre région
+#define LORA_FREQ        434.0   // MHz — bande EU433, Grove Ra-02 (SX1278)
 // Intervalle minimum entre deux envois LoRa (ms).
-// Duty cycle EU 434 MHz : 1 % → ~70 ms on = 7 s off minimum.
-// On prend 10 s pour rester largement dans les limites.
-#define LORA_INTERVAL_MS 10000UL
+// SF12, BW=125 kHz : airtime ≈ 4,6 s pour ~75 octets.
+// Duty cycle EU433 1 % → 4,6 s on = 460 s off minimum.
+// On prend 480 s (8 min) pour rester dans les limites.
+#define LORA_INTERVAL_MS 480000UL
 
 // ─────────────────────────────────────────────────────────────────────
 
@@ -177,6 +178,7 @@ void setup() {
 
     if (rf95.init()) {
         rf95.setFrequency(LORA_FREQ);
+        rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);  // SF12 — portée max
         loraOk = true;
         Serial.print(F("LoRa OK @ "));
         Serial.print(LORA_FREQ);

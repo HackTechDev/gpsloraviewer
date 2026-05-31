@@ -74,7 +74,8 @@
 #endif
 
 // ── Paramètres LoRa ──────────────────────────────────────────────────
-#define LORA_FREQ  434.0   // MHz — doit correspondre à gps_lora_logger.ino
+// Doit être identique à gps_lora_logger.ino (fréquence + modem config).
+#define LORA_FREQ  434.0   // MHz — bande EU433, Grove Ra-02 (SX1278)
 
 // ─────────────────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ void setup() {
     }
 
     rf95.setFrequency(LORA_FREQ);
+    rf95.setModemConfig(RH_RF95::Bw125Cr48Sf4096);  // SF12 — doit correspondre à l'émetteur
 
     ShowSerial.print(F("# LoRa OK @ "));
     ShowSerial.print(LORA_FREQ);
