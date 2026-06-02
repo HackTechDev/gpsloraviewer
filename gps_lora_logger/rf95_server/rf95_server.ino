@@ -13,8 +13,8 @@
  * ── Câblage module LoRa (interface UART) ─────────────────────────────
  *
  *   AVR (Uno/Nano) :
- *     LoRa TX --> pin 10  (RX Arduino)
- *     LoRa RX --> pin 11  (TX Arduino)
+ *     LoRa TX --> pin 5  (RX Arduino) — connecteur Grove D5, fil jaune
+ *     LoRa RX --> pin 6  (TX Arduino) — connecteur Grove D5, fil blanc
  *
  *   RP2040 / RP2350 / XIAO RA4M1 :
  *     LoRa TX --> D7  (RX)
@@ -31,7 +31,7 @@
 
 #ifdef __AVR__
     #include <SoftwareSerial.h>
-    SoftwareSerial SSerial(10, 11);   // RX=10, TX=11
+    SoftwareSerial SSerial(5, 6);   // RX=5 (LoRa TX), TX=6 (LoRa RX) — connecteur Grove D5
     #define COMSerial SSerial
     #define ShowSerial Serial
     RH_RF95<SoftwareSerial> rf95(COMSerial);
