@@ -42,7 +42,7 @@
 
 ## Récepteur LoRa / Intégration PC
 
-- ~~**Script de réception PC**~~ ✅ Implémenté — `lora_receiver.py` lit le port série, écrit les trames NMEA dans `tracks/gps/LORA_*.txt`, lisible dans GPS Viewer
+- ~~**Script de réception PC**~~ ✅ Implémenté — `lora_receiver.py` lit le port série, écrit les trames NMEA dans `tracks/gps/LORA_*.txt`, lisible dans GPS Viewer. Lanceur `runLoRaReceiver.sh` fourni.
 - **Réception temps réel dans GPS Viewer** : intégrer `lora_receiver.py` directement dans `gps_viewer.py` pour afficher la position live sur la carte sans fichier intermédiaire
 - **ACK et qualité de liaison** : afficher le RSSI reçu dans l'interface GPS Viewer
 - **Rejeu différé** : détecter automatiquement les fichiers `LORA_*.txt` dans `tracks/gps/` et les proposer à l'ouverture

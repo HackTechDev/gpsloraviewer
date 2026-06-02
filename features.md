@@ -207,6 +207,7 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - Affiche le RSSI et un compteur de paquets sur des lignes `#` (ignorées par les parseurs NMEA)
 - Compatible multi-plateformes : AVR, RP2040, ESP32, SAMD, STM32, nRF52840
 - Indicateur LED : flash 50 ms à chaque trame reçue
+- **Câblage AVR** : connecteur Grove D5 — LoRa TX → pin 5 (fil jaune), LoRa RX → pin 6 (fil blanc)
 
 ### Script de réception PC (`gps_viewer/lora_receiver.py`)
 
@@ -217,6 +218,7 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - `flush()` à chaque trame — le fichier est lisible en direct dans GPS Viewer
 - Ctrl+C arrête proprement et affiche le nombre de trames enregistrées
 - Dépendance : `pip install pyserial`
+- Lanceur : `./runLoRaReceiver.sh` (passe tous les arguments au script Python)
 
 ### Bibliothèque RadioHead patchée (`gps_lora_logger/lib/Grove_LoRa_Radio/`)
 

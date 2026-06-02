@@ -95,8 +95,8 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
 
 | Composant | Connexion (AVR) |
 |-----------|-----------------|
-| LoRa TX | Pin 10 (RX) |
-| LoRa RX | Pin 11 (TX) |
+| LoRa TX | Pin 5 — connecteur Grove D5, fil jaune |
+| LoRa RX | Pin 6 — connecteur Grove D5, fil blanc |
 
 - Reçoit les trames LoRa et les relaie vers le port Serial USB (115 200 baud)
 - Affiche le RSSI sur des lignes `#` (ignorées par les parseurs NMEA)
@@ -108,8 +108,10 @@ pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
 Script Python à lancer sur le PC pour lire le port série du récepteur et enregistrer les trames dans un fichier exploitable par GPS Viewer.
 
 ```bash
-python3 gps_viewer/lora_receiver.py                        # port auto-détecté
-python3 gps_viewer/lora_receiver.py --port /dev/ttyUSB0    # port explicite
+./runLoRaReceiver.sh                                        # port auto-détecté
+./runLoRaReceiver.sh --port /dev/ttyUSB0                    # port explicite
+# ou directement :
+python3 gps_viewer/lora_receiver.py --port /dev/ttyUSB0
 ```
 
 - Détecte automatiquement `/dev/ttyUSB*` ou `/dev/ttyACM*`
