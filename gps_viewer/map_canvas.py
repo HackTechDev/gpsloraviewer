@@ -170,6 +170,54 @@ class _TileWorker(QThread):
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Thread de calcul des courbes de niveau (SRTM)
+# ══════════════════════════════════════════════════════════════════════
+
+class _ContourWorker(QThread):
+    """Télécharge les données SRTM et calcule la grille d'altitude en arrière-plan."""
+    contour_ready = pyqtSignal(object, object, object, int)  # lat_g, lon_g, elev_g, req_id
+    failed        = pyqtSignal(str)
+
+    def __init__(self, lat_min, lat_max, lon_min, lon_max, req_id: int):
+        super().__init__()
+        self._lat_min   = lat_min
+        self._lat_max   = lat_max
+        self._lon_min   = lon_min
+        self._lon_max   = lon_max
+        self._req_id    = req_id
+        self._cancelled = False
+
+    def cancel(self):
+        self._cancelled = True
+
+    def run(self):
+        try:
+            import srtm
+        except ImportError:
+            self.failed.emit("srtm.py non installé — pip install srtm.py")
+            return
+        try:
+            data  = srtm.get_data()
+            n_lat, n_lon = 80, 80
+            lats  = np.linspace(self._lat_min, self._lat_max, n_lat)
+            lons  = np.linspace(self._lon_min, self._lon_max, n_lon)
+            elev  = np.full((n_lat, n_lon), np.nan)
+            for i, lat in enumerate(lats):
+                if self._cancelled:
+                    return
+                for j, lon in enumerate(lons):
+                    e = data.get_elevation(lat, lon)
+                    if e is not None:
+                        elev[i, j] = float(e)
+            lon_g, lat_g = np.meshgrid(lons, lats)
+            if not self._cancelled:
+                self.contour_ready.emit(lat_g, lon_g, elev, self._req_id)
+        except Exception as exc:
+            if not self._cancelled:
+                self.failed.emit(str(exc))
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Canvas Carte  (matplotlib + contextily OSM)
 # ══════════════════════════════════════════════════════════════════════
 
@@ -240,9 +288,19 @@ class MapCanvas(FigureCanvas):
         self._pan_xy   = None   # position pixel au début du drag
         self._pan_lims = None   # (xlim, ylim) au début du drag
 
+        # ── Courbes de niveau ────────────────────────────────────────
+        self._contours_enabled  = False
+        self._contour_worker: _ContourWorker | None = None
+        self._contour_artists   = []   # collections + labels matplotlib
+        self._contour_req       = 0    # compteur de requête — invalide les résultats périmés
+
         # ── Timer rechargement tuiles (débounce 450 ms) ─────────────
         self._tile_timer = QTimer(singleShot=True, interval=450)
         self._tile_timer.timeout.connect(self._reload_tiles)
+
+        # ── Timer courbes de niveau (débounce 900 ms) ────────────────
+        self._contour_timer = QTimer(singleShot=True, interval=900)
+        self._contour_timer.timeout.connect(self._request_contours)
 
         # ── Événements souris / clavier ──────────────────────────────
         self.mpl_connect('scroll_event',         self._on_scroll)
@@ -291,10 +349,13 @@ class MapCanvas(FigureCanvas):
         self.ax.set_xlim(xlim)
         self.ax.set_ylim(ylim)
 
-        # Trace immédiatement visible ; tuiles chargées en arrière-plan
+        # Trace immédiatement visible ; tuiles en arrière-plan
+        self._contour_artists = []
         self._draw_track()
         self._redraw_photos()
         self._request_tiles()
+        if self._contours_enabled:
+            self._contour_timer.start()
 
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
@@ -694,11 +755,12 @@ class MapCanvas(FigureCanvas):
             return
         if any(g.count >= 500 for g in self._gps_list):
             self._redraw_all_tracks()
-        # Redessine les yeux (rayon dépend de la vue courante)
         for i, entry in enumerate(self._photo_data):
             if entry.get('angle') is not None:
                 self._draw_eye(i)
         self._request_tiles()
+        if self._contours_enabled:
+            self._contour_timer.start()
 
     # ── Zoom à la molette ────────────────────────────────────────────
 
@@ -925,10 +987,17 @@ class MapCanvas(FigureCanvas):
         self._default_lim = (new_xl, new_yl)
 
         self._request_tiles()
+        if self._contours_enabled:
+            self._contour_timer.start()
         self.draw_idle()
 
     def reset(self):
         """Remet le canvas dans l'état initial sans aucune trace ni photo."""
+        self._contour_timer.stop()
+        if self._contour_worker is not None:
+            self._contour_worker.cancel()
+            self._contour_worker = None
+        self._contour_artists = []
         if self._tile_worker is not None:
             self._tile_worker.cancel()
             self._tile_worker = None
@@ -1255,6 +1324,117 @@ class MapCanvas(FigureCanvas):
 
         if idx < len(self._photo_artists):
             self._photo_artists[idx].extend(eye_artists)
+
+    # ── Courbes de niveau ────────────────────────────────────────────
+
+    def toggle_contours(self, enabled: bool):
+        """Active / désactive les courbes de niveau."""
+        self._contours_enabled = enabled
+        if enabled:
+            if self._default_lim is not None:
+                self._request_contours()
+        else:
+            self._contour_timer.stop()
+            self._clear_contours()
+            self.draw_idle()
+
+    def _view_bounds_latlon(self):
+        """Retourne (lat_min, lat_max, lon_min, lon_max) du viewport courant + 5 % de marge."""
+        xl = self.ax.get_xlim()
+        yl = self.ax.get_ylim()
+        dx = (xl[1] - xl[0]) * 0.05
+        dy = (yl[1] - yl[0]) * 0.05
+        lat_min, lon_min = _webmerc_to_latlon(xl[0] - dx, yl[0] - dy)
+        lat_max, lon_max = _webmerc_to_latlon(xl[1] + dx, yl[1] + dy)
+        return lat_min, lat_max, lon_min, lon_max
+
+    def _request_contours(self):
+        """Lance le worker SRTM pour le viewport courant."""
+        if self._default_lim is None:
+            return
+        if self._contour_worker is not None and self._contour_worker.isRunning():
+            self._contour_worker.cancel()
+        self._clear_contours()
+        self._contour_req += 1
+        lat_min, lat_max, lon_min, lon_max = self._view_bounds_latlon()
+        self._contour_worker = _ContourWorker(
+            lat_min, lat_max, lon_min, lon_max, self._contour_req)
+        self._contour_worker.contour_ready.connect(self._on_contours_ready)
+        self._contour_worker.failed.connect(self._on_contours_failed)
+        self.tile_loading.emit(True)
+        self._contour_worker.start()
+
+    def _on_contours_ready(self, lat_g, lon_g, elev_g, req_id: int):
+        self.tile_loading.emit(False)
+        if req_id == self._contour_req and self._contours_enabled:
+            self._draw_contours(lat_g, lon_g, elev_g)
+
+    def _on_contours_failed(self, msg: str):
+        self.tile_loading.emit(False)
+
+    def _clear_contours(self):
+        for art in self._contour_artists:
+            try:
+                art.remove()
+            except Exception:
+                pass
+        self._contour_artists = []
+
+    def _draw_contours(self, lat_g, lon_g, elev_g):
+        """Dessine les courbes de niveau sur la carte."""
+        self._clear_contours()
+
+        # Conversion lat/lon → Web Mercator (vectorisée)
+        R    = 6378137.0
+        x_g  = np.radians(lon_g) * R
+        y_g  = R * np.log(np.tan(np.pi / 4 + np.radians(lat_g) / 2))
+
+        # Intervalle adaptatif selon le dénivelé
+        valid = elev_g[~np.isnan(elev_g)]
+        if valid.size == 0:
+            return
+        e_min, e_max = float(valid.min()), float(valid.max())
+        e_range = e_max - e_min
+        if e_range < 150:
+            interval = 25
+        elif e_range < 500:
+            interval = 50
+        else:
+            interval = 100
+
+        first = int(np.floor(e_min / interval)) * interval
+        last  = int(np.ceil(e_max  / interval)) * interval + interval
+        minor_levels = list(range(first, last, interval))
+        major_levels = [l for l in minor_levels if l % (interval * 5) == 0]
+        if not minor_levels:
+            return
+
+        # Courbes mineures
+        cs = self.ax.contour(x_g, y_g, elev_g,
+                             levels=minor_levels,
+                             colors=['#8B6914'],
+                             linewidths=[0.4],
+                             alpha=0.55,
+                             zorder=4)
+        for coll in cs.collections:
+            self._contour_artists.append(coll)
+
+        # Courbes majeures + étiquettes
+        if major_levels:
+            cs_maj = self.ax.contour(x_g, y_g, elev_g,
+                                     levels=major_levels,
+                                     colors=['#5C3D0A'],
+                                     linewidths=[0.9],
+                                     alpha=0.75,
+                                     zorder=4)
+            for coll in cs_maj.collections:
+                self._contour_artists.append(coll)
+            for lbl in self.ax.clabel(cs_maj, inline=True,
+                                      fontsize=6, fmt='%d m',
+                                      colors=['#3E2800']):
+                self._contour_artists.append(lbl)
+
+        self.draw_idle()
 
     def reload_photo_annotations(self):
         """Supprime les artistes photo existants puis redessine depuis _photo_data."""

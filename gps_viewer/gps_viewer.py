@@ -155,6 +155,14 @@ class MainWindow(QMainWindow):
         act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
         tb.addAction(act_ov)
 
+        act_contours = QAction('🏔  Courbes', self)
+        act_contours.setCheckable(True)
+        act_contours.setToolTip(
+            'Afficher les courbes de niveau SRTM (30 m)\n'
+            'Premier affichage : téléchargement des tuiles SRTM (~quelques Mo)')
+        act_contours.toggled.connect(lambda v: self._map.toggle_contours(v))
+        tb.addAction(act_contours)
+
         # ── Vue 3D ──────────────────────────────────────────────────
         act_3d = QAction('🌐  Vue 3D', self)
         act_3d.setShortcut('Ctrl+3')
