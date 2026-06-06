@@ -5,14 +5,51 @@ dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog
 from pathlib import Path
 from PIL import Image as PilImage
 
+import numpy as np
+
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit,
     QGridLayout, QScrollArea, QPushButton, QTextEdit, QFormLayout,
     QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QPixmap
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import QApplication
+
+
+def _read_exif(image_path: str) -> dict:
+    """Lit date, appareil et focale depuis les métadonnées EXIF. Retourne {} si absent."""
+    try:
+        from PIL import ExifTags
+        img = PilImage.open(image_path)
+        raw = img._getexif()
+        if not raw:
+            return {}
+        tags = {ExifTags.TAGS.get(k, k): v for k, v in raw.items()}
+        result = {}
+        for key in ('DateTimeOriginal', 'DateTime'):
+            if key in tags:
+                result['date'] = str(tags[key])
+                break
+        if 'Model' in tags:
+            result['model'] = str(tags['Model']).strip()
+        if 'FocalLength' in tags:
+            fl = tags['FocalLength']
+            try:
+                result['focal'] = f'{float(fl.numerator) / float(fl.denominator):.0f} mm'
+            except Exception:
+                result['focal'] = f'{fl} mm'
+        return result
+    except Exception:
+        return {}
+
+
+def _pil_to_pixmap(pil_img) -> QPixmap:
+    """Convertit une image PIL RGB en QPixmap."""
+    arr = np.ascontiguousarray(pil_img)
+    h, w, c = arr.shape
+    qimg = QImage(arr.data, w, h, w * c, QImage.Format_RGB888).copy()
+    return QPixmap.fromImage(qimg)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -110,14 +147,68 @@ class CoordDialog(QDialog):
 # ══════════════════════════════════════════════════════════════════════
 
 class PhotoViewDialog(QDialog):
-    """Affiche la photo originale en plein format dans une fenêtre dédiée."""
+    """Affiche la photo originale en plein format avec infos EXIF et rotation."""
 
     def __init__(self, image_path: str, lat: float, lon: float,
-                 titre: str = '', description: str = '', parent=None):
+                 titre: str = '', description: str = '',
+                 thumb_path: str = '', parent=None):
         super().__init__(parent)
         self.setWindowTitle(Path(image_path).name)
         self.deletion_requested = False
+        self._image_path  = image_path
+        self._thumb_path  = thumb_path
+        self._orig_pil    = None
+        self._rotation_deg = 0          # degrés CW cumulés
+        self._img_label   = None
+        screen = QApplication.primaryScreen().availableGeometry()
+        self._max_w = int(screen.width()  * 0.9)
+        self._max_h = int(screen.height() * 0.85)
+        try:
+            self._orig_pil = PilImage.open(image_path).convert('RGB')
+        except Exception:
+            pass
         self._build(image_path, lat, lon, titre, description)
+
+    @property
+    def rotation_applied(self) -> bool:
+        return self._rotation_deg % 360 != 0
+
+    def _update_image(self):
+        """Rafraîchit le QLabel avec l'image pivotée courante."""
+        if self._orig_pil is None or self._img_label is None:
+            return
+        img = self._orig_pil.rotate(-self._rotation_deg, expand=True)
+        pixmap = _pil_to_pixmap(img)
+        scaled = pixmap.scaled(self._max_w, self._max_h,
+                               Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self._img_label.setPixmap(scaled)
+        self._img_label.adjustSize()
+
+    def _rotate_left(self):
+        self._rotation_deg = (self._rotation_deg - 90) % 360
+        self._update_image()
+
+    def _rotate_right(self):
+        self._rotation_deg = (self._rotation_deg + 90) % 360
+        self._update_image()
+
+    def accept(self):
+        if self._orig_pil and self.rotation_applied and not self.deletion_requested:
+            try:
+                rotated = self._orig_pil.rotate(-self._rotation_deg, expand=True)
+                ext = Path(self._image_path).suffix.lower()
+                if ext in ('.jpg', '.jpeg'):
+                    rotated.save(self._image_path, 'JPEG', quality=95)
+                else:
+                    rotated.save(self._image_path)
+                if self._thumb_path and Path(self._thumb_path).exists():
+                    thumb = rotated.copy()
+                    thumb.thumbnail((80, 80), PilImage.LANCZOS)
+                    thumb.save(self._thumb_path, 'JPEG', quality=85)
+            except Exception as e:
+                QMessageBox.warning(self, 'Erreur rotation',
+                                    f'Impossible de sauvegarder la rotation :\n{e}')
+        super().accept()
 
     def _build(self, image_path: str, lat: float, lon: float,
                titre: str, description: str):
@@ -125,31 +216,42 @@ class PhotoViewDialog(QDialog):
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(8)
 
-        pixmap = QPixmap(image_path)
-        if pixmap.isNull():
-            layout.addWidget(QLabel(f'Impossible de charger l\'image :\n{image_path}'))
-        else:
-            # Taille max = 90 % de l'écran disponible
-            screen = QApplication.primaryScreen().availableGeometry()
-            max_w  = int(screen.width()  * 0.9)
-            max_h  = int(screen.height() * 0.85)
-            scaled = pixmap.scaled(max_w, max_h,
-                                   Qt.KeepAspectRatio,
-                                   Qt.SmoothTransformation)
-            lbl_img = QLabel()
-            lbl_img.setPixmap(scaled)
-            lbl_img.setAlignment(Qt.AlignCenter)
+        # ── Image ─────────────────────────────────────────────────────
+        self._img_label = QLabel()
+        self._img_label.setAlignment(Qt.AlignCenter)
 
-            if scaled.width() > 1200 or scaled.height() > 900:
+        if self._orig_pil:
+            self._update_image()
+            pw = self._img_label.pixmap().width()
+            ph = self._img_label.pixmap().height()
+            if pw > 1200 or ph > 900:
                 scroll = QScrollArea()
-                scroll.setWidget(lbl_img)
+                scroll.setWidget(self._img_label)
                 scroll.setWidgetResizable(False)
                 scroll.setAlignment(Qt.AlignCenter)
                 layout.addWidget(scroll)
             else:
-                layout.addWidget(lbl_img)
+                layout.addWidget(self._img_label)
+        else:
+            self._img_label.setText(f"Impossible de charger l'image :\n{image_path}")
+            layout.addWidget(self._img_label)
 
-        # Coordonnées + chemin
+        # ── EXIF ──────────────────────────────────────────────────────
+        exif = _read_exif(image_path)
+        if exif:
+            parts = []
+            if 'date' in exif:
+                parts.append(exif['date'])
+            if 'model' in exif:
+                parts.append(exif['model'])
+            if 'focal' in exif:
+                parts.append(exif['focal'])
+            if parts:
+                lbl_exif = QLabel('  |  '.join(parts))
+                lbl_exif.setStyleSheet('color:#888; font-size:10px;')
+                layout.addWidget(lbl_exif)
+
+        # ── Coordonnées + chemin ──────────────────────────────────────
         info = QLabel(
             f'<span style="color:#555;">'
             f'{lat:.6f}° N &nbsp; {lon:.6f}° E'
@@ -158,6 +260,23 @@ class PhotoViewDialog(QDialog):
         info.setTextFormat(Qt.RichText)
         info.setWordWrap(True)
         layout.addWidget(info)
+
+        # ── Rotation ──────────────────────────────────────────────────
+        if self._orig_pil:
+            rot_row = QHBoxLayout()
+            rot_row.addWidget(QLabel('Rotation :'))
+            btn_ccw = QPushButton('↶')
+            btn_ccw.setFixedWidth(40)
+            btn_ccw.setToolTip('Rotation 90° vers la gauche')
+            btn_ccw.clicked.connect(self._rotate_left)
+            rot_row.addWidget(btn_ccw)
+            btn_cw = QPushButton('↷')
+            btn_cw.setFixedWidth(40)
+            btn_cw.setToolTip('Rotation 90° vers la droite')
+            btn_cw.clicked.connect(self._rotate_right)
+            rot_row.addWidget(btn_cw)
+            rot_row.addStretch()
+            layout.addLayout(rot_row)
 
         # ── Titre et description ──────────────────────────────────────
         form = QFormLayout()
@@ -177,7 +296,7 @@ class PhotoViewDialog(QDialog):
 
         layout.addLayout(form)
 
-        # ── Barre de boutons ─────────────────────────────────────────
+        # ── Barre de boutons ──────────────────────────────────────────
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 

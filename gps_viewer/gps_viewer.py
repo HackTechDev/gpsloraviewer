@@ -638,18 +638,24 @@ class MainWindow(QMainWindow):
             return
         dlg = PhotoViewDialog(
             orig, entry['lat'], entry['lon'],
-            entry.get('titre', ''), entry.get('description', ''), self)
+            entry.get('titre', ''), entry.get('description', ''),
+            thumb_path=entry.get('thumb_path', ''), parent=self)
         dlg.exec_()
         if dlg.deletion_requested:
             self._delete_photo(index)
         else:
             new_titre = dlg._titre_edit.text().strip()
             new_desc  = dlg._desc_edit.toPlainText().strip()
-            if (new_titre != entry.get('titre', '')
-                    or new_desc != entry.get('description', '')):
+            title_changed = (new_titre != entry.get('titre', '')
+                             or new_desc != entry.get('description', ''))
+            if title_changed:
                 self._map._photo_data[index]['titre']       = new_titre
                 self._map._photo_data[index]['description'] = new_desc
                 self._save_track_json()
+            if dlg.rotation_applied:
+                self._map.reload_photo_annotations()
+                self._sb.showMessage('Photo pivotée et miniature mise à jour.')
+            elif title_changed:
                 self._sb.showMessage('Annotations photo mises à jour.')
 
     def _delete_photo(self, index: int):
