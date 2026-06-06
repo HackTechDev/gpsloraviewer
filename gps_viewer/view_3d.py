@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
 
-from gps_nmea import GPSData
+from gps_nmea import GPSData, _webmerc_to_latlon, WEB_MERC_R
 from map_canvas import _TRACK_PALETTE, _CMAP_ALT, _CMAP_SPD
 
 
@@ -48,6 +48,49 @@ class _TileFetcher(QThread):
         except Exception:
             if not self._cancel:
                 self.tile_ready.emit(None, None, self._draw_id)
+
+
+# ── Worker : données SRTM pour les courbes 3D ────────────────────────
+
+class _SrtmFetcher(QThread):
+    """Calcule la grille d'altitude SRTM pour la bounding box des traces."""
+    srtm_ready = pyqtSignal(object, object, object, int)  # lat_g, lon_g, elev_g, draw_id
+
+    def __init__(self, lat_min, lat_max, lon_min, lon_max, draw_id: int):
+        super().__init__()
+        self._lat_min = lat_min
+        self._lat_max = lat_max
+        self._lon_min = lon_min
+        self._lon_max = lon_max
+        self._draw_id = draw_id
+        self._cancel  = False
+
+    def cancel(self):
+        self._cancel = True
+
+    def run(self):
+        try:
+            import srtm
+        except ImportError:
+            return
+        try:
+            data  = srtm.get_data()
+            n     = 60
+            lats  = np.linspace(self._lat_min, self._lat_max, n)
+            lons  = np.linspace(self._lon_min, self._lon_max, n)
+            elev  = np.full((n, n), np.nan)
+            for i, lat in enumerate(lats):
+                if self._cancel:
+                    return
+                for j, lon in enumerate(lons):
+                    e = data.get_elevation(lat, lon)
+                    if e is not None:
+                        elev[i, j] = float(e)
+            lon_g, lat_g = np.meshgrid(lons, lats)
+            if not self._cancel:
+                self.srtm_ready.emit(lat_g, lon_g, elev, self._draw_id)
+        except Exception:
+            pass
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -85,9 +128,12 @@ class View3DWindow(QDialog):
         self._gps_list    = gps_list
         self._color_mode  = 'flat'   # 'flat' | 'altitude' | 'speed'
         self._show_map    = True
+        self._show_contours = False
         self._res_px      = 64       # résolution max de la tuile OSM (px)
         self._draw_id     = 0
         self._tile_fetcher: '_TileFetcher | None' = None
+        self._srtm_fetcher: '_SrtmFetcher | None' = None
+        self._srtm_data   = None     # (lat_g, lon_g, elev_g) mis en cache
         self._map_surface = None     # référence au plot_surface OSM
         self._raw_img     = None     # image brute (non redimensionnée) pour changement de résolution
         self._raw_ext     = None
@@ -142,6 +188,17 @@ class View3DWindow(QDialog):
 
         tb.addSeparator()
 
+        self._act_contours = QAction('🏔  Courbes 3D', self)
+        self._act_contours.setCheckable(True)
+        self._act_contours.setChecked(False)
+        self._act_contours.setToolTip(
+            'Afficher les courbes de niveau SRTM en 3D\n'
+            'Premier affichage : téléchargement des données SRTM')
+        self._act_contours.triggered.connect(self._on_toggle_contours)
+        tb.addAction(self._act_contours)
+
+        tb.addSeparator()
+
         act_reset = QAction('⌂  Réinitialiser la vue', self)
         act_reset.setToolTip("Revenir à l'angle de vue par défaut")
         act_reset.triggered.connect(self._reset_view)
@@ -159,6 +216,7 @@ class View3DWindow(QDialog):
         # pour que chaque frame soit calculée sans les polygones OSM
         self._canvas.mpl_connect('button_press_event',   self._on_rot_start)
         self._canvas.mpl_connect('button_release_event', self._on_rot_end)
+        self._canvas.mpl_connect('scroll_event',         self._on_scroll)
 
         # Différer le rendu pour que la fenêtre s'affiche avant de bloquer
         QTimer.singleShot(0, self._draw)
@@ -176,6 +234,12 @@ class View3DWindow(QDialog):
                 self._tile_fetcher.tile_ready.disconnect()
             except TypeError:
                 pass
+        if self._srtm_fetcher and self._srtm_fetcher.isRunning():
+            self._srtm_fetcher.cancel()
+            try:
+                self._srtm_fetcher.srtm_ready.disconnect()
+            except TypeError:
+                pass
 
     def _on_rot_start(self, event):
         """Cache la surface OSM dès qu'une interaction souris débute."""
@@ -187,6 +251,23 @@ class View3DWindow(QDialog):
         if self._map_surface is not None:
             self._map_surface.set_visible(True)
             self._canvas.draw_idle()
+
+    def _on_scroll(self, event):
+        """Zoom molette : redimensionne les limites des trois axes autour de leur centre."""
+        if not self._fig.axes:
+            return
+        ax = self._fig.axes[0]
+        factor = 0.85 if event.button == 'up' else 1.18
+        for get_lim, set_lim in (
+            (ax.get_xlim3d, ax.set_xlim3d),
+            (ax.get_ylim3d, ax.set_ylim3d),
+            (ax.get_zlim3d, ax.set_zlim3d),
+        ):
+            lo, hi = get_lim()
+            mid    = (lo + hi) / 2
+            half   = (hi - lo) / 2 * factor
+            set_lim(mid - half, mid + half)
+        self._canvas.draw_idle()
 
     # ── Slots ────────────────────────────────────────────────────────
 
@@ -210,7 +291,18 @@ class View3DWindow(QDialog):
     def refresh(self, gps_list: list):
         """Met à jour les données et redessine."""
         self._gps_list = gps_list
+        self._srtm_data = None   # nouvelles traces → recalcul SRTM nécessaire
         self._draw()
+
+    def _on_toggle_contours(self, checked: bool):
+        self._show_contours = checked
+        if checked:
+            if self._srtm_data is not None:
+                self._draw_3d_contours(*self._srtm_data)
+            else:
+                self._launch_srtm_fetch()
+        else:
+            self._draw()
 
     # ── Rendu 3D (synchrone : traces uniquement) ─────────────────────
 
@@ -333,6 +425,13 @@ class View3DWindow(QDialog):
         self._fig.tight_layout(pad=1.0)
         self._canvas.draw()
 
+        # ── Courbes de niveau 3D ─────────────────────────────────────
+        if self._show_contours:
+            if self._srtm_data is not None:
+                self._draw_3d_contours(*self._srtm_data)
+            else:
+                self._launch_srtm_fetch()
+
         # ── Lancement du téléchargement en arrière-plan ──────────────
         if self._show_map:
             span = max(all_xs.max() - all_xs.min(),
@@ -385,6 +484,81 @@ class View3DWindow(QDialog):
                                              shade=False, antialiased=False,
                                              rstride=1, cstride=1)
         self._canvas.draw()
+
+    # ── Courbes de niveau 3D ─────────────────────────────────────────
+
+    def _launch_srtm_fetch(self):
+        """Calcule la bounding box des traces et lance le worker SRTM."""
+        if not self._gps_list:
+            return
+        all_xs = np.concatenate([g.xs for g in self._gps_list])
+        all_ys = np.concatenate([g.ys for g in self._gps_list])
+        pad_x  = (all_xs.max() - all_xs.min()) * 0.15
+        pad_y  = (all_ys.max() - all_ys.min()) * 0.15
+        lat_min, lon_min = _webmerc_to_latlon(all_xs.min() - pad_x,
+                                               all_ys.min() - pad_y)
+        lat_max, lon_max = _webmerc_to_latlon(all_xs.max() + pad_x,
+                                               all_ys.max() + pad_y)
+        if self._srtm_fetcher and self._srtm_fetcher.isRunning():
+            self._srtm_fetcher.cancel()
+        self._srtm_fetcher = _SrtmFetcher(
+            lat_min, lat_max, lon_min, lon_max, self._draw_id)
+        self._srtm_fetcher.srtm_ready.connect(self._on_srtm_ready)
+        self._srtm_fetcher.start()
+
+    def _on_srtm_ready(self, lat_g, lon_g, elev_g, draw_id: int):
+        if draw_id != self._draw_id or not self._show_contours:
+            return
+        self._srtm_data = (lat_g, lon_g, elev_g)
+        self._draw_3d_contours(lat_g, lon_g, elev_g)
+
+    def _draw_3d_contours(self, lat_g, lon_g, elev_g):
+        """Dessine les courbes de niveau en 3D à leur altitude réelle."""
+        if not self._fig.axes:
+            return
+        ax = self._fig.axes[0]
+
+        # Conversion lat/lon → Web Mercator centré sur x_ref/y_ref
+        x_g = np.radians(lon_g) * WEB_MERC_R - self._x_ref
+        y_g = (WEB_MERC_R * np.log(
+                   np.tan(np.pi / 4 + np.radians(lat_g) / 2))
+               - self._y_ref)
+
+        # Remplacer les NaN par la médiane locale
+        valid = elev_g[~np.isnan(elev_g)]
+        if valid.size == 0:
+            return
+        e_min, e_max = float(valid.min()), float(valid.max())
+        if np.isnan(elev_g).any():
+            elev_g = elev_g.copy()
+            elev_g[np.isnan(elev_g)] = float(np.nanmedian(elev_g))
+
+        # Intervalle : ~12 niveaux, arrondi à 10 m
+        e_range = e_max - e_min
+        interval = max(10, round(e_range / 12 / 10) * 10)
+        first  = int(np.ceil(e_min / interval)) * interval
+        levels = list(range(first, int(e_max) + interval, interval))
+        if not levels:
+            return
+        major_levels = [l for l in levels if l % (interval * 4) == 0]
+
+        # Courbes mineures
+        ax.contour3D(x_g, y_g, elev_g,
+                     levels=levels,
+                     colors=['#8B6914'],
+                     linewidths=0.4,
+                     alpha=0.50)
+
+        # Courbes majeures + étiquettes Z
+        if major_levels:
+            cs = ax.contour3D(x_g, y_g, elev_g,
+                              levels=major_levels,
+                              colors=['#5C3D0A'],
+                              linewidths=0.9,
+                              alpha=0.80)
+            ax.clabel(cs, fmt='%d m', fontsize=6, colors=['#3E2800'])
+
+        self._canvas.draw_idle()
 
     def _reset_view(self):
         if self._fig.axes:
