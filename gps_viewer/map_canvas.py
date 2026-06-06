@@ -291,7 +291,8 @@ class MapCanvas(FigureCanvas):
         # ── Courbes de niveau ────────────────────────────────────────
         self._contours_enabled  = False
         self._contour_worker: _ContourWorker | None = None
-        self._contour_artists   = []   # collections + labels matplotlib
+        self._contour_sets      = []   # ContourSet objects (cs.remove() matplotlib 3.8+)
+        self._contour_labels    = []   # Text objects des étiquettes (remove séparé)
         self._contour_req       = 0    # compteur de requête — invalide les résultats périmés
 
         # ── Timer rechargement tuiles (débounce 450 ms) ─────────────
@@ -350,7 +351,8 @@ class MapCanvas(FigureCanvas):
         self.ax.set_ylim(ylim)
 
         # Trace immédiatement visible ; tuiles en arrière-plan
-        self._contour_artists = []
+        self._contour_sets   = []
+        self._contour_labels = []
         self._draw_track()
         self._redraw_photos()
         self._request_tiles()
@@ -776,6 +778,10 @@ class MapCanvas(FigureCanvas):
         nh = (yl[1] - yl[0]) * factor
         self.ax.set_xlim(xc - nw * relx,       xc + nw * (1 - relx))
         self.ax.set_ylim(yc - nh * rely,        yc + nh * (1 - rely))
+        if self._contours_enabled:
+            self._contour_req += 1   # invalide tout worker en cours
+            if self._contour_sets:
+                self._clear_contours()
         self.draw_idle()
         self._tile_timer.start()   # recharge les tuiles 450 ms après le dernier scroll
 
@@ -848,6 +854,11 @@ class MapCanvas(FigureCanvas):
         if event.button == 1 and self._pan_xy is not None:
             self._pan_xy = None
             self.setCursor(Qt.OpenHandCursor)
+            if self._contours_enabled:
+                self._contour_req += 1   # invalide tout worker en cours
+                if self._contour_sets:
+                    self._clear_contours()
+                    self.draw_idle()
             self._reload_tiles()   # reload immédiat à la fin du drag
 
     # ── Reset vue ───────────────────────────────────────────────────
@@ -997,7 +1008,8 @@ class MapCanvas(FigureCanvas):
         if self._contour_worker is not None:
             self._contour_worker.cancel()
             self._contour_worker = None
-        self._contour_artists = []
+        self._contour_sets   = []
+        self._contour_labels = []
         if self._tile_worker is not None:
             self._tile_worker.cancel()
             self._tile_worker = None
@@ -1373,21 +1385,28 @@ class MapCanvas(FigureCanvas):
         self.tile_loading.emit(False)
 
     def _clear_contours(self):
-        for art in self._contour_artists:
+        """Efface tous les artists de courbes de niveau de l'axe."""
+        for cs in self._contour_sets:
             try:
-                art.remove()
+                cs.remove()
             except Exception:
                 pass
-        self._contour_artists = []
+        self._contour_sets = []
+        for txt in self._contour_labels:
+            try:
+                txt.remove()
+            except Exception:
+                pass
+        self._contour_labels = []
 
     def _draw_contours(self, lat_g, lon_g, elev_g):
         """Dessine les courbes de niveau sur la carte."""
         self._clear_contours()
 
         # Conversion lat/lon → Web Mercator (vectorisée)
-        R    = 6378137.0
-        x_g  = np.radians(lon_g) * R
-        y_g  = R * np.log(np.tan(np.pi / 4 + np.radians(lat_g) / 2))
+        R   = 6378137.0
+        x_g = np.radians(lon_g) * R
+        y_g = R * np.log(np.tan(np.pi / 4 + np.radians(lat_g) / 2))
 
         # Intervalle adaptatif selon le dénivelé
         valid = elev_g[~np.isnan(elev_g)]
@@ -1410,14 +1429,13 @@ class MapCanvas(FigureCanvas):
             return
 
         # Courbes mineures
-        cs = self.ax.contour(x_g, y_g, elev_g,
-                             levels=minor_levels,
-                             colors=['#8B6914'],
-                             linewidths=[0.4],
-                             alpha=0.55,
-                             zorder=4)
-        for coll in cs.collections:
-            self._contour_artists.append(coll)
+        cs_minor = self.ax.contour(x_g, y_g, elev_g,
+                                   levels=minor_levels,
+                                   colors=['#8B6914'],
+                                   linewidths=[0.4],
+                                   alpha=0.55,
+                                   zorder=4)
+        self._contour_sets.append(cs_minor)
 
         # Courbes majeures + étiquettes
         if major_levels:
@@ -1427,12 +1445,10 @@ class MapCanvas(FigureCanvas):
                                      linewidths=[0.9],
                                      alpha=0.75,
                                      zorder=4)
-            for coll in cs_maj.collections:
-                self._contour_artists.append(coll)
-            for lbl in self.ax.clabel(cs_maj, inline=True,
-                                      fontsize=6, fmt='%d m',
-                                      colors=['#3E2800']):
-                self._contour_artists.append(lbl)
+            self._contour_sets.append(cs_maj)
+            self._contour_labels = self.ax.clabel(
+                cs_maj, inline=True, fontsize=6, fmt='%d m',
+                colors=['#3E2800'])
 
         self.draw_idle()
 
