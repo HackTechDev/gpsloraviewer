@@ -212,6 +212,16 @@ class View3DWindow(QDialog):
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root.addWidget(self._canvas)
 
+        # ── Barre de stats en bas ────────────────────────────────────
+        self._lbl_stats = QLabel()
+        self._lbl_stats.setStyleSheet(
+            'background:#1e2d40; color:#9ab; font-size:11px;'
+            ' padding:3px 10px; border-top:1px solid #2c3e55;')
+        self._lbl_stats.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self._lbl_stats.setFixedHeight(24)
+        root.addWidget(self._lbl_stats)
+        self._refresh_stats_label()
+
         # Masquer la carte pendant les interactions souris (rotation/pan)
         # pour que chaque frame soit calculée sans les polygones OSM
         self._canvas.mpl_connect('button_press_event',   self._on_rot_start)
@@ -292,7 +302,20 @@ class View3DWindow(QDialog):
         """Met à jour les données et redessine."""
         self._gps_list = gps_list
         self._srtm_data = None   # nouvelles traces → recalcul SRTM nécessaire
+        self._refresh_stats_label()
         self._draw()
+
+    def _refresh_stats_label(self):
+        """Met à jour la barre de stats D+ / D− en bas de la fenêtre."""
+        parts = []
+        for gps in self._gps_list:
+            s = f'{gps.filename}  —  {gps.total_dist:.0f} m'
+            if gps.elev_gain is not None:
+                s += f'  •  D+ {gps.elev_gain:.0f} m  D− {gps.elev_loss:.0f} m'
+            if gps.alt_min is not None:
+                s += f'  •  Alt {gps.alt_min:.0f}–{gps.alt_max:.0f} m'
+            parts.append(s)
+        self._lbl_stats.setText('     │     '.join(parts) if parts else '—')
 
     def _on_toggle_contours(self, checked: bool):
         self._show_contours = checked
