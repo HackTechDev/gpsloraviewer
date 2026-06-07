@@ -1,5 +1,5 @@
 """
-dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog
+dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog, SettingsDialog
 """
 
 from pathlib import Path
@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit,
     QGridLayout, QScrollArea, QPushButton, QTextEdit, QFormLayout,
     QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QSizePolicy,
+    QGroupBox, QCheckBox, QSlider,
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QImage
@@ -357,3 +358,146 @@ class ParcoursPropDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Dialogue Préférences / Paramétrage
+# ══════════════════════════════════════════════════════════════════════
+
+class SettingsDialog(QDialog):
+    """Dialogue de préférences avec application immédiate des valeurs."""
+
+    def __init__(self, parent=None, *,
+                 track_linewidth: float = 2.5,
+                 map_alpha: float       = 1.0,
+                 photo_zoom: float      = 0.8,
+                 photo_cross: int       = 16,
+                 cursor_dot: int        = 12,
+                 autopan_margin: int    = 0,
+                 remember_layout: bool  = False,
+                 on_changed=None):
+        super().__init__(parent)
+        self.setWindowTitle('Préférences')
+        self.setMinimumWidth(360)
+        self._on_changed = on_changed  # callable(key, value) appelé à chaque modification
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        # ── Groupe Carte ─────────────────────────────────────────────
+        grp_map = QGroupBox('Carte')
+        form_map = QFormLayout(grp_map)
+        form_map.setSpacing(8)
+
+        self._sb_linewidth = QDoubleSpinBox()
+        self._sb_linewidth.setRange(0.5, 10.0)
+        self._sb_linewidth.setSingleStep(0.5)
+        self._sb_linewidth.setSuffix(' px')
+        self._sb_linewidth.setValue(track_linewidth)
+        self._sb_linewidth.valueChanged.connect(
+            lambda v: self._emit('track_linewidth', v))
+        form_map.addRow('Épaisseur de la trace :', self._sb_linewidth)
+
+        self._sl_alpha = QSlider(Qt.Horizontal)
+        self._sl_alpha.setRange(0, 100)
+        self._sl_alpha.setValue(int(map_alpha * 100))
+        self._lbl_alpha = QLabel(f'{int(map_alpha * 100)} %')
+        self._lbl_alpha.setFixedWidth(38)
+        self._sl_alpha.valueChanged.connect(self._on_alpha_changed)
+        row_alpha = QHBoxLayout()
+        row_alpha.addWidget(self._sl_alpha, 1)
+        row_alpha.addWidget(self._lbl_alpha)
+        form_map.addRow('Opacité fond de carte :', row_alpha)
+
+        self._sb_photo_zoom = QDoubleSpinBox()
+        self._sb_photo_zoom.setRange(0.2, 3.0)
+        self._sb_photo_zoom.setSingleStep(0.1)
+        self._sb_photo_zoom.setValue(photo_zoom)
+        self._sb_photo_zoom.valueChanged.connect(
+            lambda v: self._emit('photo_zoom', v))
+        form_map.addRow('Taille icônes photo :', self._sb_photo_zoom)
+
+        self._sb_photo_cross = QSpinBox()
+        self._sb_photo_cross.setRange(4, 64)
+        self._sb_photo_cross.setSuffix(' px')
+        self._sb_photo_cross.setValue(photo_cross)
+        self._sb_photo_cross.valueChanged.connect(
+            lambda v: self._emit('photo_cross', v))
+        form_map.addRow('Taille croix photo :', self._sb_photo_cross)
+
+        self._sb_cursor = QSpinBox()
+        self._sb_cursor.setRange(4, 40)
+        self._sb_cursor.setSuffix(' px')
+        self._sb_cursor.setValue(cursor_dot)
+        self._sb_cursor.valueChanged.connect(
+            lambda v: self._emit('cursor_dot', v))
+        form_map.addRow('Taille curseur rouge :', self._sb_cursor)
+
+        self._sb_autopan = QSpinBox()
+        self._sb_autopan.setRange(0, 400)
+        self._sb_autopan.setSuffix(' px')
+        self._sb_autopan.setToolTip('0 = pan dès que le curseur sort de la vue')
+        self._sb_autopan.setValue(autopan_margin)
+        self._sb_autopan.valueChanged.connect(
+            lambda v: self._emit('autopan_margin', v))
+        form_map.addRow('Marge auto-pan :', self._sb_autopan)
+
+        layout.addWidget(grp_map)
+
+        # ── Groupe Général ───────────────────────────────────────────
+        grp_gen = QGroupBox('Général')
+        form_gen = QFormLayout(grp_gen)
+        form_gen.setSpacing(8)
+
+        self._chk_layout = QCheckBox('Mémoriser la mise en page')
+        self._chk_layout.setChecked(remember_layout)
+        self._chk_layout.toggled.connect(
+            lambda v: self._emit('remember_layout', v))
+        form_gen.addRow(self._chk_layout)
+
+        layout.addWidget(grp_gen)
+
+        # ── Boutons ──────────────────────────────────────────────────
+        btns = QDialogButtonBox(QDialogButtonBox.Close)
+        btns.rejected.connect(self.reject)
+        layout.addWidget(btns)
+
+    # ── Accesseurs ──────────────────────────────────────────────────
+
+    @property
+    def track_linewidth(self) -> float:
+        return self._sb_linewidth.value()
+
+    @property
+    def map_alpha(self) -> float:
+        return self._sl_alpha.value() / 100.0
+
+    @property
+    def photo_zoom(self) -> float:
+        return self._sb_photo_zoom.value()
+
+    @property
+    def photo_cross(self) -> int:
+        return self._sb_photo_cross.value()
+
+    @property
+    def cursor_dot(self) -> int:
+        return self._sb_cursor.value()
+
+    @property
+    def autopan_margin(self) -> int:
+        return self._sb_autopan.value()
+
+    @property
+    def remember_layout(self) -> bool:
+        return self._chk_layout.isChecked()
+
+    # ── Interne ─────────────────────────────────────────────────────
+
+    def _on_alpha_changed(self, val: int):
+        self._lbl_alpha.setText(f'{val} %')
+        self._emit('map_alpha', val / 100.0)
+
+    def _emit(self, key: str, value):
+        if callable(self._on_changed):
+            self._on_changed(key, value)

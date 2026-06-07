@@ -258,6 +258,14 @@ class MapCanvas(FigureCanvas):
         self._tile_worker: _TileWorker | None = None
         self._pending_key = None   # clé de la dernière requête en cours
 
+        # ── Paramètres visuels configurables ────────────────────────
+        self._track_linewidth   = 2.5   # épaisseur des traces (px)
+        self._map_alpha         = 1.0   # opacité du fond de carte 0–1
+        self._photo_zoom        = 0.8   # zoom miniature photo
+        self._photo_cross_size  = 16    # taille croix photo (markersize)
+        self._cursor_dot_size   = 12    # diamètre curseur rouge (markersize)
+        self._autopan_margin_px = 0     # marge déclenchement pan (px, 0=bord)
+
         # ── Simplification / coloration de trace ────────────────────
         self._track_artists: list    = []   # un artist (ligne) par GPSData
         self._track_markers: list    = []   # [(start, end), ...] par trace
@@ -404,7 +412,7 @@ class MapCanvas(FigureCanvas):
         self.ax.legend(loc='upper left', fontsize=9,
                        framealpha=0.85, fancybox=True)
         self._cursor_dot, = self.ax.plot([], [], 'o',
-            color=C_CURSOR, markersize=12, zorder=10,
+            color=C_CURSOR, markersize=self._cursor_dot_size, zorder=10,
             markeredgecolor='white', markeredgewidth=1.5, visible=False)
         self._cursor_annot = self.ax.annotate(
             '', xy=(0, 0), xycoords='data',
@@ -422,7 +430,7 @@ class MapCanvas(FigureCanvas):
         if self._track_mode == 'flat':
             xs, ys = self._simplified_track_for(gps)
             line, = self.ax.plot(
-                xs, ys, color=color, linewidth=2.5, zorder=5,
+                xs, ys, color=color, linewidth=self._track_linewidth, zorder=5,
                 solid_capstyle='round', solid_joinstyle='round')
             return line
 
@@ -447,7 +455,7 @@ class MapCanvas(FigureCanvas):
 
         norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
         lc   = LineCollection(segs, cmap=cmap, norm=norm,
-                              linewidth=2.5, zorder=5,
+                              linewidth=self._track_linewidth, zorder=5,
                               capstyle='round', joinstyle='round')
         lc.set_array(seg_vals)
         self.ax.add_collection(lc)
@@ -616,7 +624,8 @@ class MapCanvas(FigureCanvas):
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
         for im in list(self.ax.images):
             im.remove()
-        self.ax.imshow(img, extent=ext, interpolation='bilinear', zorder=0)
+        self.ax.imshow(img, extent=ext, interpolation='bilinear', zorder=0,
+                       alpha=self._map_alpha)
         self.ax.set_xlim(xl)
         self.ax.set_ylim(yl)
         self.draw_idle()
@@ -1027,7 +1036,7 @@ class MapCanvas(FigureCanvas):
                 except Exception:
                     pass
         self._cursor_dot, = self.ax.plot([], [], 'o',
-            color=C_CURSOR, markersize=12, zorder=10,
+            color=C_CURSOR, markersize=self._cursor_dot_size, zorder=10,
             markeredgecolor='white', markeredgewidth=1.5, visible=False)
         self._cursor_annot = self.ax.annotate(
             '', xy=(0, 0), xycoords='data',
@@ -1036,6 +1045,7 @@ class MapCanvas(FigureCanvas):
             bbox=dict(boxstyle='round,pad=0.4', facecolor='#1a2535',
                       edgecolor=C_CURSOR, alpha=0.92),
             zorder=12, visible=False)
+
 
         # Étend _default_lim pour englober la nouvelle trace
         mg = max(100, (gps.xs.max() - gps.xs.min()) * 0.18,
@@ -1194,14 +1204,23 @@ class MapCanvas(FigureCanvas):
             self._play_btn.setChecked(False)
 
     def _autopan_to_cursor(self):
-        """Recentre la carte si le curseur sort de la vue."""
+        """Recentre la carte si le curseur sort de la zone active."""
         if self._gps is None or self._play_index >= self._gps.count:
             return
         x = float(self._gps.xs[self._play_index])
         y = float(self._gps.ys[self._play_index])
-        xlim = self.ax.get_xlim()
-        ylim = self.ax.get_ylim()
-        if not (xlim[0] < x < xlim[1] and ylim[0] < y < ylim[1]):
+        if self._autopan_margin_px > 0:
+            disp = self.ax.transData.transform((x, y))
+            m = self._autopan_margin_px
+            outside = (disp[0] < m or disp[0] > self.width()  - m or
+                       disp[1] < m or disp[1] > self.height() - m)
+        else:
+            xlim = self.ax.get_xlim()
+            ylim = self.ax.get_ylim()
+            outside = not (xlim[0] < x < xlim[1] and ylim[0] < y < ylim[1])
+        if outside:
+            xlim = self.ax.get_xlim()
+            ylim = self.ax.get_ylim()
             half_x = (xlim[1] - xlim[0]) / 2
             half_y = (ylim[1] - ylim[0]) / 2
             self.ax.set_xlim(x - half_x, x + half_x)
@@ -1257,6 +1276,34 @@ class MapCanvas(FigureCanvas):
                 visible and self._cursor_dot is not None
                 and self._cursor_dot.get_visible())
             self.draw_idle()
+
+    # ── Setters paramétrage ──────────────────────────────────────────────
+
+    def set_track_linewidth(self, width: float):
+        self._track_linewidth = width
+        for artist in self._track_artists:
+            try:
+                artist.set_linewidth(width)
+            except AttributeError:
+                pass
+        self.draw_idle()
+
+    def set_map_alpha(self, alpha: float):
+        self._map_alpha = max(0.0, min(1.0, alpha))
+        self._reload_tiles()
+
+    def set_photo_marker_size(self, zoom: float, cross: int):
+        self._photo_zoom       = zoom
+        self._photo_cross_size = cross
+
+    def set_cursor_dot_size(self, size: int):
+        self._cursor_dot_size = size
+        if self._cursor_dot is not None:
+            self._cursor_dot.set_markersize(size)
+            self.draw_idle()
+
+    def set_autopan_margin(self, margin_px: int):
+        self._autopan_margin_px = margin_px
 
     def set_cursor_track(self, gps: GPSData):
         """Définit la trace dont les coordonnées sont utilisées pour le curseur."""
@@ -1460,12 +1507,12 @@ class MapCanvas(FigureCanvas):
         artists = []
         cross, = self.ax.plot(
             x_m, y_m, '+', color='#e74c3c',
-            markersize=16, markeredgewidth=2.5, zorder=12)
+            markersize=self._photo_cross_size, markeredgewidth=2.5, zorder=12)
         cross.pickradius = 12   # zone de clic élargie pour la croix
         artists.append(cross)
         try:
             img_arr  = np.array(PilImage.open(thumb_path).convert('RGB'))
-            imgbox   = OffsetImage(img_arr, zoom=0.8)
+            imgbox   = OffsetImage(img_arr, zoom=self._photo_zoom)
             ab = AnnotationBbox(
                 imgbox, (x_m, y_m),
                 xycoords='data',

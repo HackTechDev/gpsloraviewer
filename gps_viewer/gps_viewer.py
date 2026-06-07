@@ -33,13 +33,15 @@ from gps_nmea import GPSData, load_points, to_webmerc, _webmerc_to_latlon
 from map_canvas import MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR, _cache_size_mb
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
 from stats_panel import StatsPanel
-from dialogs import CoordDialog, PhotoViewDialog, ParcoursPropDialog
+from dialogs import CoordDialog, PhotoViewDialog, ParcoursPropDialog, SettingsDialog
 from view_3d import View3DWindow
 
 # ── Constantes application ────────────────────────────────────────────
 _CONFIG_DIR       = Path.home() / '.config' / 'gps_viewer'
 _RECENT_FILE      = _CONFIG_DIR / 'recent_tracks.json'
 _LAST_TRACK_FILE  = _CONFIG_DIR / 'last_track.txt'
+_SETTINGS_FILE    = _CONFIG_DIR / 'settings.json'
+_LAYOUT_FILE      = _CONFIG_DIR / 'layout.json'
 _MAX_RECENT       = 10
 
 _TRACKS_DIR     = Path(__file__).parent / 'tracks'
@@ -62,11 +64,23 @@ class MainWindow(QMainWindow):
         self._startup_photos_shown = False
         self._parcours_titre: str = ''
         self._parcours_description: str = ''
+        # ── Paramètres par défaut (écrasés par _load_settings) ──
+        self._pref_track_linewidth: float = 2.5
+        self._pref_map_alpha:       float = 1.0
+        self._pref_photo_zoom:      float = 0.8
+        self._pref_photo_cross:     int   = 16
+        self._pref_cursor_dot:      int   = 12
+        self._pref_autopan_margin:  int   = 0
+        self._pref_remember_layout: bool  = False
         self._current_track_path: Path = self._resolve_startup_track()
+        self._load_settings()
         self._build_ui()
+        self._apply_settings_to_map()
         self._build_menus()
         self.setAcceptDrops(True)
         self._load_track_json()
+        if self._pref_remember_layout:
+            self._restore_layout()
 
     # ── Interface ────────────────────────────────────────────────────
 
@@ -204,16 +218,16 @@ class MainWindow(QMainWindow):
         self._stats     = StatsPanel()
 
         # Splitter graphiques (horizontal, en bas)
-        charts_split = QSplitter(Qt.Horizontal)
-        charts_split.addWidget(self._chart_alt)
-        charts_split.addWidget(self._chart_spd)
-        charts_split.setSizes([680, 680])
-        charts_split.setMinimumHeight(160)
+        self._charts_split = QSplitter(Qt.Horizontal)
+        self._charts_split.addWidget(self._chart_alt)
+        self._charts_split.addWidget(self._chart_spd)
+        self._charts_split.setSizes([680, 680])
+        self._charts_split.setMinimumHeight(160)
 
         # Splitter principal (vertical : carte | graphiques)
         self._vsplit = QSplitter(Qt.Vertical)
         self._vsplit.addWidget(self._map)
-        self._vsplit.addWidget(charts_split)
+        self._vsplit.addWidget(self._charts_split)
         self._vsplit.setHandleWidth(4)
         self._vsplit.setStyleSheet(
             'QSplitter::handle { background: #ddd; }')
@@ -348,6 +362,12 @@ class MainWindow(QMainWindow):
             'à côté du curseur sur la carte et les graphiques')
         self._act_cursor_info.toggled.connect(self._on_toggle_cursor_info)
         pm.addAction(self._act_cursor_info)
+
+        pm.addSeparator()
+        a_prefs = QAction('Préférences…', self)
+        a_prefs.setShortcut('Ctrl+,')
+        a_prefs.triggered.connect(self._on_prefs)
+        pm.addAction(a_prefs)
 
         hm = mb.addMenu('Aide')
         a3 = QAction('À propos', self)
@@ -560,6 +580,109 @@ class MainWindow(QMainWindow):
         self._map.set_show_cursor_info(visible)
         self._chart_alt.set_show_cursor_info(visible)
         self._chart_spd.set_show_cursor_info(visible)
+
+    # ── Préférences ──────────────────────────────────────────────────
+
+    def _load_settings(self):
+        try:
+            if _SETTINGS_FILE.exists():
+                d = json.loads(_SETTINGS_FILE.read_text(encoding='utf-8'))
+                self._pref_track_linewidth = float(d.get('track_linewidth', self._pref_track_linewidth))
+                self._pref_map_alpha       = float(d.get('map_alpha',       self._pref_map_alpha))
+                self._pref_photo_zoom      = float(d.get('photo_zoom',      self._pref_photo_zoom))
+                self._pref_photo_cross     = int(d.get('photo_cross',       self._pref_photo_cross))
+                self._pref_cursor_dot      = int(d.get('cursor_dot',        self._pref_cursor_dot))
+                self._pref_autopan_margin  = int(d.get('autopan_margin',    self._pref_autopan_margin))
+                self._pref_remember_layout = bool(d.get('remember_layout',  self._pref_remember_layout))
+        except Exception:
+            pass
+
+    def _save_settings(self):
+        _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        d = {
+            'track_linewidth': self._pref_track_linewidth,
+            'map_alpha':       self._pref_map_alpha,
+            'photo_zoom':      self._pref_photo_zoom,
+            'photo_cross':     self._pref_photo_cross,
+            'cursor_dot':      self._pref_cursor_dot,
+            'autopan_margin':  self._pref_autopan_margin,
+            'remember_layout': self._pref_remember_layout,
+        }
+        _SETTINGS_FILE.write_text(json.dumps(d, indent=2), encoding='utf-8')
+
+    def _apply_settings_to_map(self):
+        self._map.set_track_linewidth(self._pref_track_linewidth)
+        self._map.set_map_alpha(self._pref_map_alpha)
+        self._map.set_photo_marker_size(self._pref_photo_zoom, self._pref_photo_cross)
+        self._map.set_cursor_dot_size(self._pref_cursor_dot)
+        self._map.set_autopan_margin(self._pref_autopan_margin)
+
+    def _on_pref_changed(self, key: str, value):
+        if key == 'track_linewidth':
+            self._pref_track_linewidth = value
+            self._map.set_track_linewidth(value)
+        elif key == 'map_alpha':
+            self._pref_map_alpha = value
+            self._map.set_map_alpha(value)
+        elif key == 'photo_zoom':
+            self._pref_photo_zoom = value
+            self._map.set_photo_marker_size(self._pref_photo_zoom, self._pref_photo_cross)
+        elif key == 'photo_cross':
+            self._pref_photo_cross = value
+            self._map.set_photo_marker_size(self._pref_photo_zoom, self._pref_photo_cross)
+        elif key == 'cursor_dot':
+            self._pref_cursor_dot = value
+            self._map.set_cursor_dot_size(value)
+        elif key == 'autopan_margin':
+            self._pref_autopan_margin = value
+            self._map.set_autopan_margin(value)
+        elif key == 'remember_layout':
+            self._pref_remember_layout = value
+
+    def _on_prefs(self):
+        dlg = SettingsDialog(
+            self,
+            track_linewidth = self._pref_track_linewidth,
+            map_alpha       = self._pref_map_alpha,
+            photo_zoom      = self._pref_photo_zoom,
+            photo_cross     = self._pref_photo_cross,
+            cursor_dot      = self._pref_cursor_dot,
+            autopan_margin  = self._pref_autopan_margin,
+            remember_layout = self._pref_remember_layout,
+            on_changed      = self._on_pref_changed,
+        )
+        dlg.exec_()
+        self._save_settings()
+
+    def _save_layout(self):
+        try:
+            _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+            d = {
+                'width':        self.width(),
+                'height':       self.height(),
+                'splitter_charts': self._charts_split.sizes(),
+                'splitter_v':      self._vsplit.sizes(),
+            }
+            _LAYOUT_FILE.write_text(json.dumps(d), encoding='utf-8')
+        except Exception:
+            pass
+
+    def _restore_layout(self):
+        try:
+            if _LAYOUT_FILE.exists():
+                d = json.loads(_LAYOUT_FILE.read_text(encoding='utf-8'))
+                self.resize(d.get('width', self.width()), d.get('height', self.height()))
+                if 'splitter_charts' in d:
+                    self._charts_split.setSizes(d['splitter_charts'])
+                if 'splitter_v' in d:
+                    self._vsplit.setSizes(d['splitter_v'])
+        except Exception:
+            pass
+
+    def closeEvent(self, event):
+        if self._pref_remember_layout:
+            self._save_layout()
+        event.accept()
 
     # ── Fichiers récents ─────────────────────────────────────────────
 
