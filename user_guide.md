@@ -12,12 +12,13 @@
 8. [Les graphiques](#8-les-graphiques)
 9. [Le panneau de statistiques](#9-le-panneau-de-statistiques)
 10. [Les annotations photo](#10-les-annotations-photo)
-11. [Outils cartographiques](#11-outils-cartographiques)
-12. [La vue 3D](#12-la-vue-3d)
-13. [Le menu Paramétrage](#13-le-menu-paramétrage)
-14. [Enregistrer et gérer les fichiers](#14-enregistrer-et-gérer-les-fichiers)
-15. [Raccourcis clavier](#15-raccourcis-clavier)
-16. [Maintenance](#16-maintenance)
+11. [Les annotations note](#11-les-annotations-note)
+12. [Outils cartographiques](#12-outils-cartographiques)
+13. [La vue 3D](#13-la-vue-3d)
+14. [Le menu Paramétrage](#14-le-menu-paramétrage)
+15. [Enregistrer et gérer les fichiers](#15-enregistrer-et-gérer-les-fichiers)
+16. [Raccourcis clavier](#16-raccourcis-clavier)
+17. [Maintenance](#17-maintenance)
 
 ---
 
@@ -28,7 +29,7 @@ GPS Viewer est une application desktop de visualisation de traces GPS. Elle perm
 - charger une ou plusieurs traces GPS au format NMEA (`.txt`) sur une carte interactive ;
 - comparer les profils altimétriques et de vitesse de chaque trace ;
 - suivre automatiquement un parcours avec la barre de lecture ;
-- annoter la carte avec des photos géolocalisées ;
+- annoter la carte avec des photos géolocalisées et des notes textuelles ;
 - visualiser le parcours en trois dimensions avec courbes de niveau ;
 - sauvegarder l'ensemble (traces + annotations) dans un fichier **parcours** (`.json`).
 
@@ -289,7 +290,32 @@ L'indicateur de direction matérialise l'angle de vue au moment de la prise de p
 
 ---
 
-## 11. Outils cartographiques
+## 11. Les annotations note
+
+### Placer une note
+
+1. Activez le **mode note** : bouton **📝 Note** dans la barre d'outils, ou touche `N`.
+   Le curseur de la carte prend la forme d'une croix.
+2. **Cliquez** à l'endroit souhaité sur la carte.
+3. Une boîte de dialogue s'ouvre — saisissez un **Titre** et une **Description** (optionnelle).
+4. Cliquez **Enregistrer** : un **marqueur orange** apparaît sur la carte avec le titre affiché au-dessus dans une étiquette jaune pâle.
+
+> Les modes Photo et Note sont **mutuellement exclusifs** : activer l'un désactive l'autre automatiquement.
+> `Échap` ou re-clic sur le bouton **📝 Note** quitte le mode note.
+
+### Modifier ou supprimer une note
+
+Cliquez sur le **marqueur orange** d'une note pour ouvrir le dialogue d'édition :
+- champs **Titre** et **Description** pré-remplis et modifiables ;
+- bouton **🗑 Supprimer** pour retirer définitivement la note.
+
+### Sauvegarde
+
+Les notes sont automatiquement sauvegardées dans le fichier parcours JSON (clé `"notes"`) et rechargées à la prochaine ouverture du parcours.
+
+---
+
+## 12. Outils cartographiques
 
 ### Grille de coordonnées (`Ctrl+L`)
 
@@ -318,7 +344,7 @@ Saisissez une latitude et une longitude décimales (ou collez `48.8566, 2.3522`)
 
 ---
 
-## 12. La vue 3D
+## 13. La vue 3D
 
 **Navigation → Vue 3D** (`Ctrl+3`) ouvre une fenêtre 3D indépendante et non bloquante.
 
@@ -358,7 +384,7 @@ Le bouton **🏔 Courbes** calcule et affiche les courbes de niveau issues des d
 
 ---
 
-## 13. Le menu Paramétrage
+## 14. Le menu Paramétrage
 
 ### Afficher distance parcourue / restante
 
@@ -390,7 +416,7 @@ La boîte de dialogue Préférences applique chaque modification **immédiatemen
 
 ---
 
-## 14. Enregistrer et gérer les fichiers
+## 15. Enregistrer et gérer les fichiers
 
 | Action | Raccourci | Description |
 |--------|-----------|-------------|
@@ -408,7 +434,7 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 
 ---
 
-## 15. Raccourcis clavier
+## 16. Raccourcis clavier
 
 | Raccourci | Action |
 |-----------|--------|
@@ -427,14 +453,15 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 | `Ctrl+,` | Ouvrir les Préférences |
 | `Ctrl+Q` | Quitter |
 | `P` | Activer / désactiver le mode annotation photo |
+| `N` | Activer / désactiver le mode annotation note |
 | `V` | Afficher / masquer l'indicateur de direction (œil) |
 | `W` | Tourner l'indicateur de +15° |
 | `X` | Tourner l'indicateur de −15° |
-| `Échap` | Effacer toutes les mesures de distance |
+| `Échap` | Quitter le mode photo / note / mesure (ou effacer les mesures) |
 
 ---
 
-## 16. Maintenance
+## 17. Maintenance
 
 ### Cache de tuiles
 

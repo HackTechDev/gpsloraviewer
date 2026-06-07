@@ -5,13 +5,14 @@
 Le fichier de trace JSON est le document central de l'application. Il regroupe :
 - les chemins absolus vers une ou plusieurs traces GPS NMEA
 - toutes les annotations photo (position, miniature, titre, description, angle de vue)
+- toutes les annotations note (position, titre, description)
 
 **Opérations disponibles (menu Fichier) :**
 
 | Action | Raccourci | Description |
 |--------|-----------|-------------|
 | Nouveau parcours… | Ctrl+N | Crée un nouveau fichier JSON vide (réinitialise la session) |
-| Ouvrir… | — | Charge un fichier JSON existant (traces GPS + photos) |
+| Ouvrir… | — | Charge un fichier JSON existant (traces GPS + photos + notes) |
 | Ajouter une trace GPS… | Ctrl+O | Ajoute une trace NMEA sur la carte courante |
 | Enregistrer | Ctrl+S | Sauvegarde dans le fichier actif |
 | Enregistrer sous… | Ctrl+Shift+S | Sauvegarde sous un nouveau nom |
@@ -37,6 +38,13 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
       "titre": "Titre optionnel",
       "description": "Description optionnelle",
       "angle": 90.0
+    }
+  ],
+  "notes": [
+    {
+      "lat": 48.123456, "lon": 7.654321,
+      "titre": "Col de la Schlucht",
+      "description": "Vue panoramique à 1 139 m"
     }
   ]
 }
@@ -148,6 +156,18 @@ Visible en bas de la carte dès qu'une trace GPS est chargée :
   - `W` — tourne de +15°
   - `X` — tourne de −15°
 - Les annotations et leurs paramètres sont sauvegardés dans le fichier JSON actif
+
+## Annotations note
+
+- **Mode note** : bouton `📝 Note` ou touche `N` — le curseur devient une croix
+- Clic sur la carte → boîte de dialogue avec champ **Titre** et champ **Description**
+- Chaque note s'affiche sur la carte sous forme d'un **marqueur orange** (cercle ⌀ 14 px) avec le titre affiché au-dessus dans une étiquette jaune pâle
+- **Clic sur le marqueur** → dialogue d'édition pré-rempli avec :
+  - Champs Titre et Description modifiables
+  - Bouton **🗑 Supprimer** pour retirer la note
+- Les modes Photo et Note sont **mutuellement exclusifs** : activer l'un désactive l'autre automatiquement
+- `Échap` ou re-clic sur le bouton quitte le mode note
+- Les notes sont sauvegardées dans le fichier JSON actif (clé `"notes"`) et rechargées au démarrage
 
 ## Graphiques
 

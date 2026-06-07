@@ -15,6 +15,7 @@
 - **Export image carte** : sauvegarder la vue carte actuelle (trace + fond de carte) en PNG haute résolution
 - **Affichage des waypoints** : marqueurs numérotés sur des points d'intérêt définis par l'utilisateur
 - **Clustering d'annotations photo** : regrouper les photos proches en un symbole `N×` pour éviter la surcharge visuelle quand il y a beaucoup d'annotations
+- **Clustering de notes** : regrouper les notes proches de la même façon
 - **Sources de tuiles supplémentaires** : OpenTopoMap (topographie), CyclOSM (vélo), Stamen Terrain
 - **Annulation des mesures de distance** : bouton dédié en plus de la touche Échap
 
@@ -62,8 +63,16 @@
 
 - ~~**Barre de lecture « Suivre »**~~ ✅ Implémenté — ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, pan automatique, synchronisation graphiques
 - ~~**Annotation curseur distance + temps**~~ ✅ Implémenté — boîte sombre : ↑ parcouru, ↓ restant, ⏱ temps écoulé, 🕐 heure GPS ; visible sur la carte et les deux graphiques
+- ~~**Barre de progression de lecture (scrubber)**~~ ✅ Implémenté — slider pleine largeur sous les contrôles, clic/glisser pour se positionner librement
 - **Curseur cliquable** : cliquer sur la trace pour positionner manuellement le curseur de lecture
-- **Barre de progression de lecture** : slider permettant de scrubber la position de lecture par clic ou glisser
+
+## Annotations note
+
+- ~~**Annotations note sur la carte**~~ ✅ Implémenté — bouton 📝 Note (touche N), marqueur orange, titre affiché, édition et suppression au clic, sauvegarde JSON
+- **Icône personnalisable** : permettre de choisir la couleur ou le symbole du marqueur par note
+- **Affichage de la description au survol** : tooltip ou popup au passage de la souris sans avoir à cliquer
+- **Tri / liste des notes** : panneau latéral listant toutes les notes avec possibilité de cliquer pour centrer la carte sur la note
+- **Export des notes** : inclure les notes dans un export GPX (waypoints) ou PDF
 
 ## Paramétrage
 
