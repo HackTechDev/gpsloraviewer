@@ -55,7 +55,7 @@ class ChartCanvas(FigureCanvas):
         self.fig.tight_layout(pad=0.8)
         self.draw()
 
-    def load(self, distances: list, data: list, ylabel: str):
+    def load(self, distances: list, data: list, ylabel: str, info: str = ''):
         self._dist_arr = np.array(distances)
         self.ax.cla()
         self._style_ax()
@@ -72,6 +72,15 @@ class ChartCanvas(FigureCanvas):
                          zorder=2, solid_capstyle='round')
             self.ax.set_ylim(vmin - pad, vmax + pad)
             self.ax.set_xlim(ds[0], ds[-1])
+
+        if info:
+            self.ax.text(0.98, 0.96, info,
+                         transform=self.ax.transAxes,
+                         ha='right', va='top', fontsize=9, color='#555',
+                         bbox=dict(boxstyle='round,pad=0.35',
+                                   facecolor='#f0f4f8',
+                                   edgecolor='#ccc', alpha=0.88),
+                         zorder=6)
 
         self._vline = self.ax.axvline(
             x=0, color=C_CURSOR, linewidth=1.6,

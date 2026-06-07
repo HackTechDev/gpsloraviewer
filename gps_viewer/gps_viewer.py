@@ -413,7 +413,9 @@ class MainWindow(QMainWindow):
         self._gps_list.append(gps)
 
         # Graphiques et stats sur la dernière trace ajoutée
-        self._chart_alt.load(gps.distances, gps.alts,   'Altitude (m)')
+        _alt_info = (f'D+ {gps.elev_gain:.0f} m  •  D− {gps.elev_loss:.0f} m'
+                     if gps.elev_gain is not None else '')
+        self._chart_alt.load(gps.distances, gps.alts,   'Altitude (m)', info=_alt_info)
         self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)')
         self._stats.refresh(gps)
 
@@ -484,7 +486,9 @@ class MainWindow(QMainWindow):
         self._gps = self._gps_list[index]
         self._map.set_cursor_track(self._gps)
         self._map.set_track_filter(self._gps)
-        self._chart_alt.load(self._gps.distances, self._gps.alts,    'Altitude (m)')
+        _alt_info = (f'D+ {self._gps.elev_gain:.0f} m  •  D− {self._gps.elev_loss:.0f} m'
+                     if self._gps.elev_gain is not None else '')
+        self._chart_alt.load(self._gps.distances, self._gps.alts, 'Altitude (m)', info=_alt_info)
         self._chart_spd.load(self._gps.distances, self._gps.speeds,  'Vitesse (km/h)')
         self._stats.refresh(self._gps)
         _elev = (f'  •  D+ {self._gps.elev_gain:.0f} m  D− {self._gps.elev_loss:.0f} m'
@@ -501,8 +505,10 @@ class MainWindow(QMainWindow):
         series_alt, series_spd = [], []
         for i, gps in enumerate(self._gps_list):
             color = _TRACK_PALETTE[i % len(_TRACK_PALETTE)]
-            series_alt.append((gps.distances, gps.alts,    gps.filename, color))
-            series_spd.append((gps.distances, gps.speeds,  gps.filename, color))
+            lbl_alt = (f'{gps.filename}  (D+ {gps.elev_gain:.0f} m  D− {gps.elev_loss:.0f} m)'
+                       if gps.elev_gain is not None else gps.filename)
+            series_alt.append((gps.distances, gps.alts,    lbl_alt,       color))
+            series_spd.append((gps.distances, gps.speeds,  gps.filename,  color))
         self._chart_alt.load_multi(series_alt, 'Altitude (m)')
         self._chart_spd.load_multi(series_spd, 'Vitesse (km/h)')
         self._gps = self._gps_list[0]  # trace de référence pour le curseur carte
