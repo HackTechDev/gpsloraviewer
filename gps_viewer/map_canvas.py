@@ -23,8 +23,8 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtWidgets import (QSizePolicy, QApplication,
-                              QWidget, QHBoxLayout, QPushButton,
-                              QLabel, QComboBox)
+                              QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
+                              QLabel, QComboBox, QSlider)
 
 from gps_nmea import GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R, parse_time_s
 
@@ -331,9 +331,10 @@ class MapCanvas(FigureCanvas):
         self._contour_timer.timeout.connect(self._request_contours)
 
         # ── Lecture automatique (playback) ───────────────────────────
-        self._play_index  = 0
-        self._play_speed  = 1    # points sautés par tick
-        self._playing     = False
+        self._play_index        = 0
+        self._play_speed        = 1    # points sautés par tick
+        self._playing           = False
+        self._scrub_was_playing = False
         self._play_timer  = QTimer(self, interval=100)
         self._play_timer.timeout.connect(self._playback_tick)
         self._play_bar    = self._build_play_bar()
@@ -1116,7 +1117,7 @@ class MapCanvas(FigureCanvas):
     # ── Lecture automatique (playback) ──────────────────────────────
 
     def _build_play_bar(self) -> QWidget:
-        """Crée la barre de lecture overlay."""
+        """Crée la barre de lecture overlay (deux rangées : contrôles + scrubber)."""
         bar = QWidget(self)
         bar.setStyleSheet(
             'QWidget { background: rgba(20,30,45,210); border-top:1px solid #2c3e55; }'
@@ -1127,37 +1128,57 @@ class MapCanvas(FigureCanvas):
             'QLabel { background:transparent; color:#9ab; font-size:11px; }'
             'QComboBox { background:#2c3e55; color:#cde; border:none; border-radius:4px;'
             '  padding:2px 6px; font-size:11px; }'
+            'QSlider::groove:horizontal { height:4px; background:#2c3e55; border-radius:2px; }'
+            'QSlider::sub-page:horizontal { background:#1a6fbf; border-radius:2px; }'
+            'QSlider::handle:horizontal { width:12px; height:12px; margin:-4px 0;'
+            '  background:#4fa3e0; border-radius:6px; }'
         )
-        bar.setFixedHeight(36)
+        bar.setFixedHeight(56)
 
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(8, 3, 8, 3)
-        layout.setSpacing(6)
+        outer = QVBoxLayout(bar)
+        outer.setContentsMargins(8, 3, 8, 2)
+        outer.setSpacing(2)
+
+        # ── Rangée contrôles ─────────────────────────────────────────
+        ctrl = QHBoxLayout()
+        ctrl.setSpacing(6)
 
         self._play_btn_reset = QPushButton('⏮')
         self._play_btn_reset.setFixedWidth(30)
         self._play_btn_reset.setToolTip('Retour au début')
         self._play_btn_reset.clicked.connect(self._playback_reset)
-        layout.addWidget(self._play_btn_reset)
+        ctrl.addWidget(self._play_btn_reset)
 
         self._play_btn = QPushButton('▶  Suivre')
         self._play_btn.setFixedWidth(90)
         self._play_btn.setCheckable(True)
         self._play_btn.setToolTip('Lancer / mettre en pause la lecture automatique')
         self._play_btn.toggled.connect(self._playback_toggle)
-        layout.addWidget(self._play_btn)
+        ctrl.addWidget(self._play_btn)
 
         self._play_lbl = QLabel('—')
-        layout.addWidget(self._play_lbl, 1)
+        ctrl.addWidget(self._play_lbl, 1)
 
-        layout.addWidget(QLabel('Vitesse :'))
+        ctrl.addWidget(QLabel('Vitesse :'))
 
         self._play_speed_combo = QComboBox()
         self._play_speed_combo.addItems(['×1', '×2', '×5', '×10'])
         self._play_speed_combo.setFixedWidth(60)
         self._play_speed_combo.setToolTip('Nombre de points sautés par tick (100 ms)')
         self._play_speed_combo.currentIndexChanged.connect(self._playback_set_speed)
-        layout.addWidget(self._play_speed_combo)
+        ctrl.addWidget(self._play_speed_combo)
+
+        outer.addLayout(ctrl)
+
+        # ── Rangée scrubber ──────────────────────────────────────────
+        self._play_scrubber = QSlider(Qt.Horizontal)
+        self._play_scrubber.setRange(0, 0)
+        self._play_scrubber.setValue(0)
+        self._play_scrubber.setToolTip('Glisser pour se positionner sur la trace')
+        self._play_scrubber.sliderPressed.connect(self._on_scrub_press)
+        self._play_scrubber.sliderMoved.connect(self._on_scrub_move)
+        self._play_scrubber.sliderReleased.connect(self._on_scrub_release)
+        outer.addWidget(self._play_scrubber)
 
         return bar
 
@@ -1190,11 +1211,31 @@ class MapCanvas(FigureCanvas):
         self._play_index = 0
         if self._gps is not None:
             self._play_lbl.setText(f'point 1 / {self._gps.count}')
+            self._play_scrubber.blockSignals(True)
+            self._play_scrubber.setValue(0)
+            self._play_scrubber.blockSignals(False)
             self.update_cursor(0)
             self.playback_index_changed.emit(0)
 
     def _playback_set_speed(self, idx: int):
         self._play_speed = [1, 2, 5, 10][idx]
+
+    def _on_scrub_press(self):
+        self._scrub_was_playing = self._playing
+        if self._playing:
+            self._play_timer.stop()
+
+    def _on_scrub_move(self, value: int):
+        if self._gps is None:
+            return
+        self._play_index = value
+        self.update_cursor(value)
+        self._play_lbl.setText(f'point {value + 1} / {self._gps.count}')
+        self.playback_index_changed.emit(value)
+
+    def _on_scrub_release(self):
+        if self._scrub_was_playing:
+            self._play_timer.start()
 
     def _playback_tick(self):
         if self._gps is None:
@@ -1205,6 +1246,9 @@ class MapCanvas(FigureCanvas):
         self.update_cursor(self._play_index)
         self._play_lbl.setText(
             f'point {self._play_index + 1} / {self._gps.count}')
+        self._play_scrubber.blockSignals(True)
+        self._play_scrubber.setValue(self._play_index)
+        self._play_scrubber.blockSignals(False)
         self.playback_index_changed.emit(self._play_index)
         self._autopan_to_cursor()
         if self._play_index >= self._gps.count - 1:
@@ -1242,6 +1286,10 @@ class MapCanvas(FigureCanvas):
         self._play_btn.setChecked(False)
         self._play_btn.setText('▶  Suivre')
         self._play_lbl.setText(f'point 1 / {gps.count}')
+        self._play_scrubber.blockSignals(True)
+        self._play_scrubber.setRange(0, gps.count - 1)
+        self._play_scrubber.setValue(0)
+        self._play_scrubber.blockSignals(False)
         self._play_bar.setVisible(True)
         bh = self._play_bar.height()
         self._play_bar.setGeometry(0, self.height() - bh, self.width(), bh)
