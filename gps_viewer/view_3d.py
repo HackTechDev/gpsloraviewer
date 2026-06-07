@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
 
 from gps_nmea import GPSData, _webmerc_to_latlon, WEB_MERC_R
-from map_canvas import _TRACK_PALETTE, _CMAP_ALT, _CMAP_SPD
+from map_canvas import _TRACK_PALETTE, _CMAP_ALT, _CMAP_SPD, _fmt_dist, _fmt_elapsed
 
 
 # ── Worker : téléchargement des tuiles OSM hors thread principal ──────
@@ -511,7 +511,7 @@ class View3DWindow(QDialog):
         self._anim_scrubber.setRange(0, max_count - 1)
         self._anim_scrubber.setValue(0)
         self._anim_scrubber.blockSignals(False)
-        self._anim_lbl.setText(f'point 1 / {max_count}')
+        self._anim_lbl.setText(self._fmt_anim_info(0))
 
         # ── Courbes de niveau 3D ─────────────────────────────────────
         if self._show_contours:
@@ -758,7 +758,7 @@ class View3DWindow(QDialog):
         self._anim_scrubber.setValue(0)
         self._anim_scrubber.blockSignals(False)
         if self._anim_max_count:
-            self._anim_lbl.setText(f'point 1 / {self._anim_max_count}')
+            self._anim_lbl.setText(self._fmt_anim_info(0))
 
     def _anim_tick(self):
         if not self._anim_dots or self._anim_max_count == 0:
@@ -778,12 +778,12 @@ class View3DWindow(QDialog):
         self._anim_scrubber.blockSignals(True)
         self._anim_scrubber.setValue(next_idx)
         self._anim_scrubber.blockSignals(False)
-        self._anim_lbl.setText(f'point {next_idx + 1} / {self._anim_max_count}')
+        self._anim_lbl.setText(self._fmt_anim_info(next_idx))
 
     def _anim_seek(self, value: int):
         self._anim_index = value
         self._update_anim_dots(value)
-        self._anim_lbl.setText(f'point {value + 1} / {self._anim_max_count}')
+        self._anim_lbl.setText(self._fmt_anim_info(value))
 
     def _on_scrub_press(self):
         self._scrub_was_playing = self._anim_playing
@@ -793,6 +793,23 @@ class View3DWindow(QDialog):
     def _on_scrub_release(self):
         if self._scrub_was_playing:
             self._anim_timer.start()
+
+    def _fmt_anim_info(self, index: int) -> str:
+        parts = [f'point {index + 1} / {self._anim_max_count}']
+        if not self._gps_list:
+            return parts[0]
+        gps = self._gps_list[0]
+        idx = min(index, gps.count - 1)
+        d_done = gps.distances[idx]
+        d_left = gps.total_dist - d_done
+        parts.append(f'↑ {_fmt_dist(d_done)}  ↓ {_fmt_dist(d_left)}')
+        et = gps.elapsed_times[idx] if gps.elapsed_times else None
+        if et is not None:
+            parts.append(f'⏱ {_fmt_elapsed(et)}')
+        t_str = gps.points[idx].get('time', '') if gps.points else ''
+        if t_str and len(t_str) >= 5:
+            parts.append(f'🕐 {t_str[:5]}')
+        return '  │  '.join(parts)
 
     def _update_anim_dots(self, index: int):
         if not self._fig.axes or not self._anim_dots:
