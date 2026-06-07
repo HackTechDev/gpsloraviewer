@@ -418,12 +418,7 @@ class MainWindow(QMainWindow):
         self._stats.refresh(gps)
 
         # Met à jour le sélecteur de trace
-        self._track_combo.blockSignals(True)
-        self._track_combo.addItem(gps.filename)
-        self._track_combo.setCurrentIndex(len(self._gps_list) - 1)
-        self._track_combo.blockSignals(False)
-        self._track_sel_action.setVisible(len(self._gps_list) >= 2)
-        self._track_sel_sep.setVisible(len(self._gps_list) >= 2)
+        self._refresh_track_combo(len(self._gps_list) - 1)
 
         self._update_track_title()
         n_traces = len(self._gps_list)
@@ -455,8 +450,29 @@ class MainWindow(QMainWindow):
 
     # ── Sélection de la trace active pour les graphiques ─────────────
 
+    def _refresh_track_combo(self, select_index: int | None = None):
+        """Reconstruit le combo de sélection de trace et gère sa visibilité."""
+        n = len(self._gps_list)
+        self._track_combo.blockSignals(True)
+        self._track_combo.clear()
+        for gps in self._gps_list:
+            self._track_combo.addItem(gps.filename)
+        if n >= 2:
+            self._track_combo.addItem('— Toutes les traces GPS')
+        idx = (n - 1) if select_index is None else select_index
+        self._track_combo.setCurrentIndex(max(0, idx))
+        self._track_combo.blockSignals(False)
+        self._track_sel_action.setVisible(n >= 2)
+        self._track_sel_sep.setVisible(n >= 2)
+
     def _on_chart_track_changed(self, index: int):
-        if not (0 <= index < len(self._gps_list)):
+        n = len(self._gps_list)
+        if n == 0:
+            return
+        if index == n:  # "— Toutes les traces GPS"
+            self._show_all_tracks_charts()
+            return
+        if not (0 <= index < n):
             return
         self._gps = self._gps_list[index]
         self._map.set_cursor_track(self._gps)
@@ -468,6 +484,20 @@ class MainWindow(QMainWindow):
             f'  •  {self._gps.count:,} points'
             f'  •  {self._gps.total_dist:.0f} m'
             f'  •  Vmax {self._gps.spd_max:.1f} km/h')
+
+    def _show_all_tracks_charts(self):
+        """Affiche les graphiques de toutes les traces superposées."""
+        series_alt, series_spd = [], []
+        for i, gps in enumerate(self._gps_list):
+            color = _TRACK_PALETTE[i % len(_TRACK_PALETTE)]
+            series_alt.append((gps.distances, gps.alts,    gps.filename, color))
+            series_spd.append((gps.distances, gps.speeds,  gps.filename, color))
+        self._chart_alt.load_multi(series_alt, 'Altitude (m)')
+        self._chart_spd.load_multi(series_spd, 'Vitesse (km/h)')
+        self._gps = self._gps_list[0]  # trace de référence pour le curseur carte
+        self._stats.clear()
+        n = len(self._gps_list)
+        self._sb.showMessage(f'Graphiques : {n} traces GPS superposées')
 
     # ── Vue 3D ───────────────────────────────────────────────────────
 

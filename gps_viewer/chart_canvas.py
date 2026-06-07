@@ -80,6 +80,44 @@ class ChartCanvas(FigureCanvas):
         self.fig.tight_layout(pad=0.8)
         self.draw()
 
+    def load_multi(self, series: list, ylabel: str):
+        """Superpose plusieurs traces sur le même graphique.
+        series : list of (distances, data, label, color)
+        """
+        self._dist_arr = None
+        self._vline    = None
+        self.ax.cla()
+        self._style_ax()
+        self.ax.set_ylabel(ylabel, fontsize=9, color='#888', labelpad=3)
+
+        all_val_min, all_val_max, all_dist_max = float('inf'), float('-inf'), 0.0
+        for distances, data, label, color in series:
+            valid = [(d, v) for d, v in zip(distances, data) if v is not None]
+            if not valid:
+                continue
+            ds, vs = zip(*valid)
+            ds, vs = np.array(ds), np.array(vs)
+            all_dist_max = max(all_dist_max, float(ds[-1]))
+            all_val_min  = min(all_val_min,  float(vs.min()))
+            all_val_max  = max(all_val_max,  float(vs.max()))
+            self.ax.fill_between(ds, vs, alpha=0.10, color=color, zorder=1)
+            self.ax.plot(ds, vs, color=color, linewidth=1.8, label=label,
+                         zorder=2, solid_capstyle='round')
+
+        if all_val_min < float('inf'):
+            pad = max(0.5, (all_val_max - all_val_min) * 0.18)
+            self.ax.set_ylim(all_val_min - pad, all_val_max + pad)
+        if all_dist_max > 0:
+            self.ax.set_xlim(0, all_dist_max)
+
+        handles, labels = self.ax.get_legend_handles_labels()
+        if handles:
+            self.ax.legend(handles, labels, fontsize=8, loc='best',
+                           framealpha=0.85, edgecolor='#ddd')
+
+        self.fig.tight_layout(pad=0.8)
+        self.draw()
+
     def clear(self):
         self._dist_arr = None
         self._vline    = None
