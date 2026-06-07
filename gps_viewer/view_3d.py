@@ -15,8 +15,8 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 import contextily as cx
 
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QToolBar, QAction,
-    QLabel, QComboBox, QSizePolicy,
+    QDialog, QVBoxLayout, QHBoxLayout, QToolBar, QAction,
+    QLabel, QComboBox, QSizePolicy, QPushButton, QSlider, QWidget,
 )
 from PyQt5.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
 
@@ -142,6 +142,17 @@ class View3DWindow(QDialog):
         self._y_ref   = 0.0
         self._z_floor = 0.0
 
+        # ── Animation ────────────────────────────────────────────────
+        self._anim_index        = 0
+        self._anim_playing      = False
+        self._anim_speed        = 1
+        self._anim_dots: list   = []
+        self._anim_traces: list = []   # [(xs_rel, ys_rel, zs)] par trace
+        self._anim_max_count    = 0
+        self._scrub_was_playing = False
+        self._anim_timer        = QTimer(self, interval=100)
+        self._anim_timer.timeout.connect(self._anim_tick)
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
@@ -212,6 +223,9 @@ class View3DWindow(QDialog):
         self._canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         root.addWidget(self._canvas)
 
+        # ── Barre de lecture 3D ──────────────────────────────────────
+        root.addWidget(self._build_play_bar())
+
         # ── Barre de stats en bas ────────────────────────────────────
         self._lbl_stats = QLabel()
         self._lbl_stats.setStyleSheet(
@@ -234,6 +248,7 @@ class View3DWindow(QDialog):
     # ── Cycle de vie ─────────────────────────────────────────────────
 
     def closeEvent(self, event):
+        self._anim_timer.stop()
         self._cancel_fetch()
         super().closeEvent(event)
 
@@ -332,6 +347,12 @@ class View3DWindow(QDialog):
     def _draw(self):
         if not self._gps_list:
             return
+
+        self._anim_timer.stop()
+        self._anim_playing = False
+        self._anim_index   = 0
+        self._anim_dots    = []
+        self._anim_traces  = []
 
         self._cancel_fetch()
         self._draw_id    += 1
@@ -447,6 +468,32 @@ class View3DWindow(QDialog):
         ax.view_init(elev=25, azim=-60)
         self._fig.tight_layout(pad=1.0)
         self._canvas.draw()
+
+        # ── Points animés (un par trace) ──────────────────────────────
+        max_count = max(g.count for g in self._gps_list)
+        self._anim_max_count = max_count
+        for i, gps in enumerate(self._gps_list):
+            color  = _TRACK_PALETTE[i % len(_TRACK_PALETTE)]
+            xs_rel = gps.xs - x_ref
+            ys_rel = gps.ys - y_ref
+            zs     = _fill_none(gps.alts)
+            self._anim_traces.append((xs_rel, ys_rel, zs))
+            dot = ax.scatter([float(xs_rel[0])], [float(ys_rel[0])], [float(zs[0])],
+                             color='white', s=80, marker='o',
+                             edgecolors=color, linewidths=2.5,
+                             depthshade=False, zorder=6)
+            self._anim_dots.append(dot)
+
+        # ── Init scrubber ─────────────────────────────────────────────
+        self._anim_btn.blockSignals(True)
+        self._anim_btn.setChecked(False)
+        self._anim_btn.setText('▶  Animer')
+        self._anim_btn.blockSignals(False)
+        self._anim_scrubber.blockSignals(True)
+        self._anim_scrubber.setRange(0, max_count - 1)
+        self._anim_scrubber.setValue(0)
+        self._anim_scrubber.blockSignals(False)
+        self._anim_lbl.setText(f'point 1 / {max_count}')
 
         # ── Courbes de niveau 3D ─────────────────────────────────────
         if self._show_contours:
@@ -588,3 +635,151 @@ class View3DWindow(QDialog):
             ax = self._fig.axes[0]
             ax.view_init(elev=25, azim=-60)
             self._canvas.draw()
+
+    # ── Barre de lecture ─────────────────────────────────────────────
+
+    def _build_play_bar(self) -> QWidget:
+        bar = QWidget()
+        bar.setStyleSheet(
+            'QWidget { background:#1e2d40; border-top:1px solid #2c3e55; }'
+            'QPushButton { background:#2c3e55; color:#cde; border:none;'
+            '  border-radius:4px; padding:3px 10px; font-size:12px; }'
+            'QPushButton:hover { background:#3d5a80; }'
+            'QPushButton:checked { background:#1a6fbf; color:white; }'
+            'QLabel { background:transparent; color:#9ab; font-size:11px; }'
+            'QComboBox { background:#2c3e55; color:#cde; border:none;'
+            '  border-radius:4px; padding:2px 6px; font-size:11px; }'
+            'QSlider::groove:horizontal { height:4px; background:#2c3e55;'
+            '  border-radius:2px; }'
+            'QSlider::sub-page:horizontal { background:#1a6fbf; border-radius:2px; }'
+            'QSlider::handle:horizontal { width:12px; height:12px; margin:-4px 0;'
+            '  background:#4fa3e0; border-radius:6px; }'
+        )
+        bar.setFixedHeight(56)
+
+        outer = QVBoxLayout(bar)
+        outer.setContentsMargins(8, 3, 8, 2)
+        outer.setSpacing(2)
+
+        ctrl = QHBoxLayout()
+        ctrl.setSpacing(6)
+
+        btn_reset = QPushButton('⏮')
+        btn_reset.setFixedWidth(30)
+        btn_reset.setToolTip('Revenir au début de la trace')
+        btn_reset.clicked.connect(self._anim_reset)
+        ctrl.addWidget(btn_reset)
+
+        self._anim_btn = QPushButton('▶  Animer')
+        self._anim_btn.setCheckable(True)
+        self._anim_btn.setFixedWidth(100)
+        self._anim_btn.setToolTip("Démarrer / mettre en pause l'animation")
+        self._anim_btn.toggled.connect(self._anim_toggle)
+        ctrl.addWidget(self._anim_btn)
+
+        self._anim_lbl = QLabel('point — / —')
+        ctrl.addWidget(self._anim_lbl, 1)
+
+        ctrl.addWidget(QLabel('Vitesse :'))
+
+        self._anim_speed_combo = QComboBox()
+        self._anim_speed_combo.addItems(['×1', '×2', '×5', '×10'])
+        self._anim_speed_combo.setFixedWidth(60)
+        self._anim_speed_combo.setToolTip('Points avancés par tick de 100 ms')
+        self._anim_speed_combo.currentIndexChanged.connect(
+            lambda idx: setattr(self, '_anim_speed', [1, 2, 5, 10][idx]))
+        ctrl.addWidget(self._anim_speed_combo)
+
+        outer.addLayout(ctrl)
+
+        self._anim_scrubber = QSlider(Qt.Horizontal)
+        self._anim_scrubber.setRange(0, 0)
+        self._anim_scrubber.setValue(0)
+        self._anim_scrubber.setToolTip('Glisser pour se positionner dans la trace')
+        self._anim_scrubber.sliderPressed.connect(self._on_scrub_press)
+        self._anim_scrubber.sliderMoved.connect(self._anim_seek)
+        self._anim_scrubber.sliderReleased.connect(self._on_scrub_release)
+        outer.addWidget(self._anim_scrubber)
+
+        return bar
+
+    # ── Slots d'animation ────────────────────────────────────────────
+
+    def _anim_toggle(self, checked: bool):
+        if checked:
+            if not self._anim_dots or self._anim_max_count == 0:
+                self._anim_btn.blockSignals(True)
+                self._anim_btn.setChecked(False)
+                self._anim_btn.blockSignals(False)
+                return
+            # Si on est déjà à la fin, rebobiner avant de lancer
+            if self._anim_index >= self._anim_max_count - 1:
+                self._anim_index = 0
+                self._update_anim_dots(0)
+                self._anim_scrubber.blockSignals(True)
+                self._anim_scrubber.setValue(0)
+                self._anim_scrubber.blockSignals(False)
+            self._anim_btn.setText('⏸  Pause')
+            self._anim_playing = True
+            self._anim_timer.start()
+        else:
+            self._anim_btn.setText('▶  Animer')
+            self._anim_playing = False
+            self._anim_timer.stop()
+
+    def _anim_reset(self):
+        self._anim_timer.stop()
+        self._anim_playing = False
+        self._anim_btn.blockSignals(True)
+        self._anim_btn.setChecked(False)
+        self._anim_btn.setText('▶  Animer')
+        self._anim_btn.blockSignals(False)
+        self._anim_index = 0
+        self._update_anim_dots(0)
+        self._anim_scrubber.blockSignals(True)
+        self._anim_scrubber.setValue(0)
+        self._anim_scrubber.blockSignals(False)
+        if self._anim_max_count:
+            self._anim_lbl.setText(f'point 1 / {self._anim_max_count}')
+
+    def _anim_tick(self):
+        if not self._anim_dots or self._anim_max_count == 0:
+            self._anim_timer.stop()
+            return
+        next_idx = self._anim_index + self._anim_speed
+        if next_idx >= self._anim_max_count:
+            next_idx = self._anim_max_count - 1
+            self._anim_timer.stop()
+            self._anim_playing = False
+            self._anim_btn.blockSignals(True)
+            self._anim_btn.setChecked(False)
+            self._anim_btn.setText('▶  Animer')
+            self._anim_btn.blockSignals(False)
+        self._anim_index = next_idx
+        self._update_anim_dots(next_idx)
+        self._anim_scrubber.blockSignals(True)
+        self._anim_scrubber.setValue(next_idx)
+        self._anim_scrubber.blockSignals(False)
+        self._anim_lbl.setText(f'point {next_idx + 1} / {self._anim_max_count}')
+
+    def _anim_seek(self, value: int):
+        self._anim_index = value
+        self._update_anim_dots(value)
+        self._anim_lbl.setText(f'point {value + 1} / {self._anim_max_count}')
+
+    def _on_scrub_press(self):
+        self._scrub_was_playing = self._anim_playing
+        if self._anim_playing:
+            self._anim_timer.stop()
+
+    def _on_scrub_release(self):
+        if self._scrub_was_playing:
+            self._anim_timer.start()
+
+    def _update_anim_dots(self, index: int):
+        if not self._fig.axes or not self._anim_dots:
+            return
+        for (xs_rel, ys_rel, zs), dot in zip(self._anim_traces, self._anim_dots):
+            idx = min(index, len(xs_rel) - 1)
+            dot._offsets3d = ([float(xs_rel[idx])], [float(ys_rel[idx])], [float(zs[idx])])
+        self._canvas.draw_idle()
