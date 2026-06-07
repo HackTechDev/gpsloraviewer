@@ -128,6 +128,30 @@ class GPSData:
         self.alt_max = max(valid_a) if valid_a else None
         self.alt_avg = sum(valid_a)/len(valid_a) if valid_a else None
 
+        # Gain/perte altimétrique D+ / D− (seuil 3 m pour filtrer le bruit GPS)
+        if valid_a:
+            _THRESH = 3.0
+            dp = dm = 0.0
+            ref = self.alts[0]
+            for a in self.alts[1:]:
+                if a is None:
+                    continue
+                if ref is None:
+                    ref = a
+                    continue
+                diff = a - ref
+                if diff >= _THRESH:
+                    dp += diff
+                    ref = a
+                elif diff <= -_THRESH:
+                    dm += abs(diff)
+                    ref = a
+            self.elev_gain: float | None = dp
+            self.elev_loss: float | None = dm
+        else:
+            self.elev_gain = None
+            self.elev_loss = None
+
         # Vitesses (km/h), lissées
         raw_spd = [None]
         for i in range(1, n):

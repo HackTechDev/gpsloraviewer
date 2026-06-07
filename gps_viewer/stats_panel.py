@@ -22,6 +22,8 @@ class StatsPanel(QFrame):
         ('Altitude min', None),
         ('Altitude max', None),
         ('Alt. moyenne', None),
+        ('D+ montée',    None),
+        ('D− descente',  None),
         ('Vitesse max',  None),
         ('Vitesse moy.', None),
     ]
@@ -118,6 +120,8 @@ class StatsPanel(QFrame):
         self._set('Altitude min', f"{gps.alt_min:.1f} m"  if gps.alt_min is not None else '—')
         self._set('Altitude max', f"{gps.alt_max:.1f} m"  if gps.alt_max is not None else '—')
         self._set('Alt. moyenne', f"{gps.alt_avg:.1f} m"  if gps.alt_avg is not None else '—')
+        self._set('D+ montée',   f"+{gps.elev_gain:.0f} m" if gps.elev_gain is not None else '—')
+        self._set('D− descente', f"−{gps.elev_loss:.0f} m" if gps.elev_loss is not None else '—')
         self._set('Vitesse max',  f"{gps.spd_max:.1f} km/h")
         self._set('Vitesse moy.', f"{gps.spd_avg:.1f} km/h")
         self._hover.setText('—')
