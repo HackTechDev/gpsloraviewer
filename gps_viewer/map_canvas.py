@@ -249,7 +249,9 @@ class MapCanvas(FigureCanvas):
         self._pending_key = None   # clé de la dernière requête en cours
 
         # ── Simplification / coloration de trace ────────────────────
-        self._track_artists: list = []  # un artist par GPSData dans _gps_list
+        self._track_artists: list    = []   # un artist (ligne) par GPSData
+        self._track_markers: list    = []   # [(start, end), ...] par trace
+        self._track_filter_idx: int | None = None  # None = toutes visibles
         self._track_mode    = 'flat'    # 'flat' | 'altitude' | 'speed'
         self._colorbar_ax   = None      # inset axes pour la colorbar
 
@@ -327,7 +329,9 @@ class MapCanvas(FigureCanvas):
         self._gps = gps
         self._gps_list     = [gps]
         self._loading_text = None
-        self._track_artists = []
+        self._track_artists    = []
+        self._track_markers    = []
+        self._track_filter_idx = None
         self._colorbar_ax  = None
         self._ov_ax        = None
         self._ov_rect      = None
@@ -364,17 +368,19 @@ class MapCanvas(FigureCanvas):
 
     def _draw_track(self):
         self._track_artists = []
+        self._track_markers = []
         for i, gps in enumerate(self._gps_list):
             color  = _TRACK_PALETTE[i % len(_TRACK_PALETTE)]
             artist = self._add_track_artist_for(gps, color)
             self._track_artists.append(artist)
-            self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
-                         color=color, markersize=11, zorder=7,
-                         markeredgecolor='white', markeredgewidth=2,
-                         label=gps.filename)
-            self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
-                         color=color, markersize=10, zorder=7,
-                         markeredgecolor='white', markeredgewidth=2)
+            s, = self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
+                              color=color, markersize=11, zorder=7,
+                              markeredgecolor='white', markeredgewidth=2,
+                              label=gps.filename)
+            e, = self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
+                              color=color, markersize=10, zorder=7,
+                              markeredgecolor='white', markeredgewidth=2)
+            self._track_markers.append((s, e))
         self.ax.legend(loc='upper left', fontsize=9,
                        framealpha=0.85, fancybox=True)
         self._cursor_dot, = self.ax.plot([], [], 'o',
@@ -382,6 +388,7 @@ class MapCanvas(FigureCanvas):
             markeredgecolor='white', markeredgewidth=1.5, visible=False)
         if self._track_mode != 'flat':
             self._draw_colorbar()
+        self._apply_track_filter()
 
     def _add_track_artist_for(self, gps: GPSData, color: str):
         """Crée et retourne l'artist de trace pour un GPSData donné."""
@@ -538,6 +545,7 @@ class MapCanvas(FigureCanvas):
             self._track_artists.append(artist)
         if self._track_mode != 'flat' and self._gps is not None:
             self._draw_colorbar()
+        self._apply_track_filter()
 
     def set_track_mode(self, mode: str):
         """Change le mode de coloration : 'flat', 'altitude', 'speed'."""
@@ -881,12 +889,14 @@ class MapCanvas(FigureCanvas):
         xlim = (cx_m - half, cx_m + half)
         ylim = (cy_m - half, cy_m + half)
 
-        self._gps           = None
-        self._gps_list      = []
-        self._cursor_dot    = None
-        self._loading_text  = None
-        self._track_artists = []
-        self._colorbar_ax   = None
+        self._gps              = None
+        self._gps_list         = []
+        self._cursor_dot       = None
+        self._loading_text     = None
+        self._track_artists    = []
+        self._track_markers    = []
+        self._track_filter_idx = None
+        self._colorbar_ax      = None
         self._ov_ax        = None
         self._ov_rect      = None
         self._grid_artists = []
@@ -927,16 +937,18 @@ class MapCanvas(FigureCanvas):
         xlim = (xmin - mg, xmax + mg)
         ylim = (ymin - mg, ymax + mg)
 
-        self._loading_text  = None
-        self._gps           = None
-        self._gps_list      = []
-        self._track_artists = []
-        self._colorbar_ax   = None
-        self._ov_ax         = None
-        self._ov_rect       = None
-        self._grid_artists  = []
-        self._meas_pts      = []
-        self._meas_artists  = []
+        self._loading_text     = None
+        self._gps              = None
+        self._gps_list         = []
+        self._track_artists    = []
+        self._track_markers    = []
+        self._track_filter_idx = None
+        self._colorbar_ax      = None
+        self._ov_ax            = None
+        self._ov_rect          = None
+        self._grid_artists     = []
+        self._meas_pts         = []
+        self._meas_artists     = []
         self._meas_rubber   = self._meas_lbl_live = None
         self._meas_pending  = None
         self._meas_timer.stop()
@@ -965,13 +977,14 @@ class MapCanvas(FigureCanvas):
         self._track_artists.append(artist)
 
         # Marqueurs départ / arrivée dans la couleur de la trace
-        self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
-                     color=color, markersize=11, zorder=7,
-                     markeredgecolor='white', markeredgewidth=2,
-                     label=gps.filename)
-        self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
-                     color=color, markersize=10, zorder=7,
-                     markeredgecolor='white', markeredgewidth=2)
+        s, = self.ax.plot(gps.xs[0],  gps.ys[0],  'o',
+                          color=color, markersize=11, zorder=7,
+                          markeredgecolor='white', markeredgewidth=2,
+                          label=gps.filename)
+        e, = self.ax.plot(gps.xs[-1], gps.ys[-1], 's',
+                          color=color, markersize=10, zorder=7,
+                          markeredgecolor='white', markeredgewidth=2)
+        self._track_markers.append((s, e))
         self.ax.legend(loc='upper left', fontsize=9,
                        framealpha=0.85, fancybox=True)
 
@@ -1015,10 +1028,12 @@ class MapCanvas(FigureCanvas):
             self._tile_worker = None
         self._tile_timer.stop()
         self._meas_timer.stop()
-        self._gps           = None
-        self._gps_list      = []
-        self._default_lim   = None
-        self._track_artists = []
+        self._gps              = None
+        self._gps_list         = []
+        self._default_lim      = None
+        self._track_artists    = []
+        self._track_markers    = []
+        self._track_filter_idx = None
         self._colorbar_ax   = None
         self._ov_ax         = None
         self._ov_rect       = None
@@ -1036,6 +1051,33 @@ class MapCanvas(FigureCanvas):
         self.ax.cla()
         self.ax.set_axis_off()
         self._welcome()
+
+    # ── Filtre de visibilité des traces ─────────────────────────────
+
+    def set_track_filter(self, gps: 'GPSData | None'):
+        """Affiche uniquement la trace gps sur la carte, ou toutes si None."""
+        if gps is None:
+            self._track_filter_idx = None
+        else:
+            try:
+                self._track_filter_idx = self._gps_list.index(gps)
+            except ValueError:
+                self._track_filter_idx = None
+        self._apply_track_filter()
+        self.draw_idle()
+
+    def _apply_track_filter(self):
+        """Applique la visibilité des traces selon _track_filter_idx."""
+        for i in range(len(self._track_artists)):
+            vis = self._track_filter_idx is None or i == self._track_filter_idx
+            self._track_artists[i].set_visible(vis)
+            if i < len(self._track_markers):
+                for m in self._track_markers[i]:
+                    m.set_visible(vis)
+        leg = self.ax.get_legend()
+        if leg is not None:
+            leg.set_visible(
+                self._track_filter_idx is None and len(self._gps_list) > 1)
 
     # ── Curseur synchronisé avec les graphiques ──────────────────────
 
