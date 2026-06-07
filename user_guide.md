@@ -177,13 +177,22 @@ La barre de lecture apparaît **automatiquement** en bas de la carte dès qu'une
 
 ### Contrôles
 
-| Bouton | Description |
-|--------|-------------|
+| Élément | Description |
+|---------|-------------|
 | ⏮ | Revenir au point de départ |
 | ▶ | Démarrer la lecture (le bouton devient ⏸) |
 | ⏸ | Mettre en pause |
 | Compteur | Affiche la position courante / nombre total de points |
 | × 1 / × 2 / × 5 / × 10 | Sélectionner la vitesse de lecture |
+| **Scrubber** (barre de progression) | Cliquer ou glisser pour se positionner librement sur la trace |
+
+### Scrubber
+
+La barre de progression sous les boutons représente l'intégralité de la trace. La tête bleue indique la position courante.
+
+- **Clic** sur la barre → saute immédiatement à ce point ; le curseur rouge, les graphiques et la boîte d'informations se mettent à jour instantanément.
+- **Glisser** → scrubbing continu ; le curseur suit en temps réel pendant le glissement.
+- **Pendant la lecture** : glisser suspend automatiquement le timer et le reprend au relâchement depuis la nouvelle position.
 
 ### Pan automatique
 
