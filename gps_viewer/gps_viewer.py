@@ -432,10 +432,13 @@ class MainWindow(QMainWindow):
             + f' &nbsp;|&nbsp; Vmax {gps.spd_max:.1f} km/h'
             + (f' &nbsp;|&nbsp; <i>({n_traces} traces)</i>' if n_traces > 1 else '')
         )
+        _elev = (f'  •  D+ {gps.elev_gain:.0f} m  D− {gps.elev_loss:.0f} m'
+                 if gps.elev_gain is not None else '')
         self._sb.showMessage(
             f'{gps.filename} — {gps.count:,} positions valides  •  '
-            f'Distance : {gps.total_dist:.1f} m  •  '
-            f'Vmax : {gps.spd_max:.1f} km/h'
+            f'Distance : {gps.total_dist:.1f} m'
+            + _elev
+            + f'  •  Vmax : {gps.spd_max:.1f} km/h'
             + (f'  •  {n_traces} traces au total' if n_traces > 1 else '')
         )
 
@@ -481,11 +484,14 @@ class MainWindow(QMainWindow):
         self._chart_alt.load(self._gps.distances, self._gps.alts,    'Altitude (m)')
         self._chart_spd.load(self._gps.distances, self._gps.speeds,  'Vitesse (km/h)')
         self._stats.refresh(self._gps)
+        _elev = (f'  •  D+ {self._gps.elev_gain:.0f} m  D− {self._gps.elev_loss:.0f} m'
+                 if self._gps.elev_gain is not None else '')
         self._sb.showMessage(
             f'Graphiques : {self._gps.filename}'
             f'  •  {self._gps.count:,} points'
             f'  •  {self._gps.total_dist:.0f} m'
-            f'  •  Vmax {self._gps.spd_max:.1f} km/h')
+            + _elev
+            + f'  •  Vmax {self._gps.spd_max:.1f} km/h')
 
     def _show_all_tracks_charts(self):
         """Affiche les graphiques de toutes les traces superposées."""
