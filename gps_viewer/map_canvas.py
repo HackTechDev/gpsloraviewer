@@ -22,7 +22,9 @@ from matplotlib.offsetbox import OffsetImage, AnnotationBbox
 
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QSizePolicy, QApplication
+from PyQt5.QtWidgets import (QSizePolicy, QApplication,
+                              QWidget, QHBoxLayout, QPushButton,
+                              QLabel, QComboBox)
 
 from gps_nmea import GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R
 
@@ -229,6 +231,7 @@ class MapCanvas(FigureCanvas):
     photo_mode_changed     = pyqtSignal(bool)   # basculement mode photo
     photo_clicked          = pyqtSignal(int)    # index dans _photo_data
     photo_eye_changed      = pyqtSignal(int)    # angle œil modifié → sauvegarder
+    playback_index_changed = pyqtSignal(int)    # lecture automatique : index courant
 
     def __init__(self):
         self.fig = Figure(facecolor='#2b2b2b')
@@ -305,6 +308,15 @@ class MapCanvas(FigureCanvas):
         self._contour_timer = QTimer(singleShot=True, interval=900)
         self._contour_timer.timeout.connect(self._request_contours)
 
+        # ── Lecture automatique (playback) ───────────────────────────
+        self._play_index  = 0
+        self._play_speed  = 1    # points sautés par tick
+        self._playing     = False
+        self._play_timer  = QTimer(self, interval=100)
+        self._play_timer.timeout.connect(self._playback_tick)
+        self._play_bar    = self._build_play_bar()
+        self._play_bar.setVisible(False)
+
         # ── Événements souris / clavier ──────────────────────────────
         self.mpl_connect('scroll_event',         self._on_scroll)
         self.mpl_connect('button_press_event',   self._on_press)
@@ -365,6 +377,7 @@ class MapCanvas(FigureCanvas):
 
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
+        self._playback_show(gps)
 
     def _draw_track(self):
         self._track_artists = []
@@ -1014,6 +1027,7 @@ class MapCanvas(FigureCanvas):
         if self._contours_enabled:
             self._contour_timer.start()
         self.draw_idle()
+        self._playback_show(gps)
 
     def reset(self):
         """Remet le canvas dans l'état initial sans aucune trace ni photo."""
@@ -1028,6 +1042,9 @@ class MapCanvas(FigureCanvas):
             self._tile_worker = None
         self._tile_timer.stop()
         self._meas_timer.stop()
+        self._play_timer.stop()
+        self._playing = False
+        self._play_bar.setVisible(False)
         self._gps              = None
         self._gps_list         = []
         self._default_lim      = None
@@ -1051,6 +1068,130 @@ class MapCanvas(FigureCanvas):
         self.ax.cla()
         self.ax.set_axis_off()
         self._welcome()
+
+    # ── Lecture automatique (playback) ──────────────────────────────
+
+    def _build_play_bar(self) -> QWidget:
+        """Crée la barre de lecture overlay."""
+        bar = QWidget(self)
+        bar.setStyleSheet(
+            'QWidget { background: rgba(20,30,45,210); border-top:1px solid #2c3e55; }'
+            'QPushButton { background:#2c3e55; color:#cde; border:none; border-radius:4px;'
+            '  padding:3px 10px; font-size:12px; }'
+            'QPushButton:hover { background:#3d5a80; }'
+            'QPushButton:checked { background:#1a6fbf; color:white; }'
+            'QLabel { background:transparent; color:#9ab; font-size:11px; }'
+            'QComboBox { background:#2c3e55; color:#cde; border:none; border-radius:4px;'
+            '  padding:2px 6px; font-size:11px; }'
+        )
+        bar.setFixedHeight(36)
+
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 3, 8, 3)
+        layout.setSpacing(6)
+
+        self._play_btn_reset = QPushButton('⏮')
+        self._play_btn_reset.setFixedWidth(30)
+        self._play_btn_reset.setToolTip('Retour au début')
+        self._play_btn_reset.clicked.connect(self._playback_reset)
+        layout.addWidget(self._play_btn_reset)
+
+        self._play_btn = QPushButton('▶  Suivre')
+        self._play_btn.setFixedWidth(90)
+        self._play_btn.setCheckable(True)
+        self._play_btn.setToolTip('Lancer / mettre en pause la lecture automatique')
+        self._play_btn.toggled.connect(self._playback_toggle)
+        layout.addWidget(self._play_btn)
+
+        self._play_lbl = QLabel('—')
+        layout.addWidget(self._play_lbl, 1)
+
+        layout.addWidget(QLabel('Vitesse :'))
+
+        self._play_speed_combo = QComboBox()
+        self._play_speed_combo.addItems(['×1', '×2', '×5', '×10'])
+        self._play_speed_combo.setFixedWidth(60)
+        self._play_speed_combo.setToolTip('Nombre de points sautés par tick (100 ms)')
+        self._play_speed_combo.currentIndexChanged.connect(self._playback_set_speed)
+        layout.addWidget(self._play_speed_combo)
+
+        return bar
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if hasattr(self, '_play_bar'):
+            bh = self._play_bar.height()
+            self._play_bar.setGeometry(0, self.height() - bh, self.width(), bh)
+
+    def _playback_toggle(self, checked: bool):
+        if checked:
+            if self._gps is None:
+                self._play_btn.setChecked(False)
+                return
+            if self._play_index >= self._gps.count - 1:
+                self._play_index = 0
+            self._playing = True
+            self._play_btn.setText('⏸  Pause')
+            self._play_timer.start()
+        else:
+            self._playing = False
+            self._play_btn.setText('▶  Suivre')
+            self._play_timer.stop()
+
+    def _playback_reset(self):
+        self._play_timer.stop()
+        self._playing = False
+        self._play_btn.setChecked(False)
+        self._play_btn.setText('▶  Suivre')
+        self._play_index = 0
+        if self._gps is not None:
+            self._play_lbl.setText(f'point 1 / {self._gps.count}')
+            self.update_cursor(0)
+            self.playback_index_changed.emit(0)
+
+    def _playback_set_speed(self, idx: int):
+        self._play_speed = [1, 2, 5, 10][idx]
+
+    def _playback_tick(self):
+        if self._gps is None:
+            self._playback_toggle(False)
+            return
+        self._play_index = min(self._play_index + self._play_speed,
+                               self._gps.count - 1)
+        self.update_cursor(self._play_index)
+        self._play_lbl.setText(
+            f'point {self._play_index + 1} / {self._gps.count}')
+        self.playback_index_changed.emit(self._play_index)
+        self._autopan_to_cursor()
+        if self._play_index >= self._gps.count - 1:
+            self._play_btn.setChecked(False)
+
+    def _autopan_to_cursor(self):
+        """Recentre la carte si le curseur sort de la vue."""
+        if self._gps is None or self._play_index >= self._gps.count:
+            return
+        x = float(self._gps.xs[self._play_index])
+        y = float(self._gps.ys[self._play_index])
+        xlim = self.ax.get_xlim()
+        ylim = self.ax.get_ylim()
+        if not (xlim[0] < x < xlim[1] and ylim[0] < y < ylim[1]):
+            half_x = (xlim[1] - xlim[0]) / 2
+            half_y = (ylim[1] - ylim[0]) / 2
+            self.ax.set_xlim(x - half_x, x + half_x)
+            self.ax.set_ylim(y - half_y, y + half_y)
+            self._reload_tiles()
+
+    def _playback_show(self, gps: GPSData):
+        """Affiche la barre et réinitialise l'état pour une nouvelle trace."""
+        self._play_timer.stop()
+        self._playing = False
+        self._play_index = 0
+        self._play_btn.setChecked(False)
+        self._play_btn.setText('▶  Suivre')
+        self._play_lbl.setText(f'point 1 / {gps.count}')
+        self._play_bar.setVisible(True)
+        bh = self._play_bar.height()
+        self._play_bar.setGeometry(0, self.height() - bh, self.width(), bh)
 
     # ── Filtre de visibilité des traces ─────────────────────────────
 

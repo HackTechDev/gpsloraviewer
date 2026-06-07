@@ -259,6 +259,7 @@ class MainWindow(QMainWindow):
         self._map.photo_eye_changed.connect(
             lambda _: self._save_track_json())
         self._act_photo.toggled.connect(self._map.set_photo_mode)
+        self._map.playback_index_changed.connect(self._on_hover)
 
     def _build_menus(self):
         mb = self.menuBar()
