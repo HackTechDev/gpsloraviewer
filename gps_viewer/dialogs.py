@@ -501,3 +501,74 @@ class SettingsDialog(QDialog):
     def _emit(self, key: str, value):
         if callable(self._on_changed):
             self._on_changed(key, value)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Dialogue Note (création / édition)
+# ══════════════════════════════════════════════════════════════════════
+
+class NoteDialog(QDialog):
+    """Boîte de dialogue pour créer ou modifier une note sur la carte."""
+
+    def __init__(self, parent=None, *, titre: str = '',
+                 description: str = '', edit_mode: bool = False):
+        super().__init__(parent)
+        self.setWindowTitle('Modifier la note' if edit_mode else 'Nouvelle note')
+        self.setMinimumWidth(380)
+        self._deleted = False
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        form = QFormLayout()
+        form.setSpacing(8)
+
+        self._edit_titre = QLineEdit(titre)
+        self._edit_titre.setPlaceholderText('Titre de la note…')
+        form.addRow('Titre :', self._edit_titre)
+
+        self._edit_desc = QTextEdit()
+        self._edit_desc.setPlainText(description)
+        self._edit_desc.setPlaceholderText('Description (optionnelle)…')
+        self._edit_desc.setFixedHeight(110)
+        form.addRow('Description :', self._edit_desc)
+
+        layout.addLayout(form)
+
+        # ── Boutons ──────────────────────────────────────────────────
+        btn_row = QHBoxLayout()
+
+        if edit_mode:
+            btn_del = QPushButton('🗑  Supprimer')
+            btn_del.setStyleSheet('color:#c0392b;')
+            btn_del.clicked.connect(self._on_delete)
+            btn_row.addWidget(btn_del)
+
+        btn_row.addStretch()
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText('Enregistrer')
+        btns.accepted.connect(self.accept)
+        btns.rejected.connect(self.reject)
+        btn_row.addWidget(btns)
+
+        layout.addLayout(btn_row)
+
+    # ── Accesseurs ──────────────────────────────────────────────────
+
+    @property
+    def titre(self) -> str:
+        return self._edit_titre.text().strip()
+
+    @property
+    def description(self) -> str:
+        return self._edit_desc.toPlainText().strip()
+
+    @property
+    def deleted(self) -> bool:
+        return self._deleted
+
+    # ── Interne ─────────────────────────────────────────────────────
+
+    def _on_delete(self):
+        self._deleted = True
+        self.accept()

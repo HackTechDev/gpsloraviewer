@@ -33,7 +33,7 @@ from gps_nmea import GPSData, load_points, to_webmerc, _webmerc_to_latlon
 from map_canvas import MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR, _cache_size_mb
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
 from stats_panel import StatsPanel
-from dialogs import CoordDialog, PhotoViewDialog, ParcoursPropDialog, SettingsDialog
+from dialogs import CoordDialog, PhotoViewDialog, ParcoursPropDialog, SettingsDialog, NoteDialog
 from view_3d import View3DWindow
 
 # ── Constantes application ────────────────────────────────────────────
@@ -164,6 +164,13 @@ class MainWindow(QMainWindow):
             'Annoter la carte avec une photo (P)  •  Clic pour choisir la position')
         tb.addAction(self._act_photo)
 
+        # ── Annotation note ──────────────────────────────────────────
+        self._act_note = QAction('📝  Note', self)
+        self._act_note.setCheckable(True)
+        self._act_note.setToolTip(
+            'Ajouter une note sur la carte (N)  •  Clic pour choisir la position')
+        tb.addAction(self._act_note)
+
         # ── Grille / miniature ───────────────────────────────────────
         act_grid = QAction('⊞  Grille', self)
         act_grid.setCheckable(True)
@@ -282,7 +289,11 @@ class MainWindow(QMainWindow):
         self._map.photo_clicked.connect(self._on_photo_clicked)
         self._map.photo_eye_changed.connect(
             lambda _: self._save_track_json())
-        self._act_photo.toggled.connect(self._map.set_photo_mode)
+        self._act_photo.toggled.connect(self._on_photo_mode_toggled)
+        self._map.note_requested.connect(self._on_note_requested)
+        self._map.note_mode_changed.connect(self._act_note.setChecked)
+        self._map.note_clicked.connect(self._on_note_clicked)
+        self._act_note.toggled.connect(self._on_note_mode_toggled)
         self._map.playback_index_changed.connect(self._on_hover)
 
     def _build_menus(self):
@@ -924,6 +935,60 @@ class MainWindow(QMainWindow):
             f'Photo ajoutée : {Path(orig_path).name}'
             f'  •  {lat:.6f}° N  {lon:.6f}° E')
 
+    # ── Mode photo : exclusivité avec note ──────────────────────────
+
+    def _on_photo_mode_toggled(self, active: bool):
+        if active and self._act_note.isChecked():
+            self._act_note.blockSignals(True)
+            self._act_note.setChecked(False)
+            self._act_note.blockSignals(False)
+            self._map.set_note_mode(False)
+        self._map.set_photo_mode(active)
+
+    # ── Annotations note ─────────────────────────────────────────────
+
+    def _on_note_mode_toggled(self, active: bool):
+        if active and self._act_photo.isChecked():
+            self._act_photo.blockSignals(True)
+            self._act_photo.setChecked(False)
+            self._act_photo.blockSignals(False)
+            self._map.set_photo_mode(False)
+        self._map.set_note_mode(active)
+
+    def _on_note_requested(self, x_m: float, y_m: float):
+        lat, lon = _webmerc_to_latlon(x_m, y_m)
+        dlg = NoteDialog(self)
+        if dlg.exec_() != 1:   # QDialog.Accepted == 1
+            return
+        if not dlg.titre and not dlg.description:
+            return
+        self._map.add_note_annotation(
+            x_m, y_m, lat, lon, dlg.titre, dlg.description)
+        self._save_track_json()
+        self._sb.showMessage(
+            f'Note ajoutée : {dlg.titre or "(sans titre)"}  •  '
+            f'{lat:.6f}° N  {lon:.6f}° E')
+
+    def _on_note_clicked(self, index: int):
+        if index >= len(self._map._note_data):
+            return
+        entry = self._map._note_data[index]
+        dlg = NoteDialog(
+            self,
+            titre       = entry.get('titre', ''),
+            description = entry.get('description', ''),
+            edit_mode   = True)
+        if dlg.exec_() != 1:
+            return
+        if dlg.deleted:
+            self._map.delete_note(index)
+            self._save_track_json()
+            self._sb.showMessage('Note supprimée.')
+        else:
+            self._map.update_note(index, dlg.titre, dlg.description)
+            self._save_track_json()
+            self._sb.showMessage('Note mise à jour.')
+
     def _save_photo(self, src_path: str):
         """Copie l'original et crée la miniature dans tracks/images/."""
         from PIL import Image as PilImage
@@ -956,11 +1021,21 @@ class MainWindow(QMainWindow):
             }
             for e in self._map._photo_data
         ]
+        notes = [
+            {
+                'lat':         round(e['lat'], 8),
+                'lon':         round(e['lon'], 8),
+                'titre':       e.get('titre', ''),
+                'description': e.get('description', ''),
+            }
+            for e in self._map._note_data
+        ]
         data = {
             'titre':       self._parcours_titre,
             'description': self._parcours_description,
             'gps_files':   [os.path.abspath(g.filepath) for g in self._gps_list],
             'photos':      photos,
+            'notes':       notes,
         }
         self._current_track_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
@@ -1029,6 +1104,21 @@ class MainWindow(QMainWindow):
             # Charge les photos dans le canvas AVANT le premier map.load()
             # afin que _redraw_photos() les dessine au moment du chargement GPS
             self._map.load_photo_data(entries)
+
+            # Charge les notes
+            note_entries = []
+            for item in data.get('notes', []):
+                lat, lon = item['lat'], item['lon']
+                x_m, y_m = to_webmerc(lat, lon)
+                note_entries.append({
+                    'x_m':         x_m,
+                    'y_m':         y_m,
+                    'lat':         lat,
+                    'lon':         lon,
+                    'titre':       item.get('titre', ''),
+                    'description': item.get('description', ''),
+                })
+            self._map.load_note_data(note_entries)
 
             # Réinitialise la liste GPS et le sélecteur de trace
             self._gps_list = []

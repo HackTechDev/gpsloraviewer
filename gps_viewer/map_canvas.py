@@ -243,6 +243,9 @@ class MapCanvas(FigureCanvas):
     photo_mode_changed     = pyqtSignal(bool)   # basculement mode photo
     photo_clicked          = pyqtSignal(int)    # index dans _photo_data
     photo_eye_changed      = pyqtSignal(int)    # angle œil modifié → sauvegarder
+    note_requested         = pyqtSignal(float, float)  # x_m, y_m Web Mercator
+    note_mode_changed      = pyqtSignal(bool)   # basculement mode note
+    note_clicked           = pyqtSignal(int)    # index dans _note_data
     playback_index_changed = pyqtSignal(int)    # lecture automatique : index courant
 
     def __init__(self):
@@ -310,6 +313,11 @@ class MapCanvas(FigureCanvas):
         self._photo_data        = []   # [{x_m,y_m,lat,lon,orig_path,thumb_path,angle}, …]
         self._photo_artists     = []   # artistes par annotation (parallèle à _photo_data)
         self._hovered_photo_idx = None # index de l'annotation sous le curseur
+
+        # ── Mode annotation note ─────────────────────────────────────
+        self._note_mode         = False
+        self._note_data         = []   # [{x_m,y_m,lat,lon,titre,description}, …]
+        self._note_artists      = []   # artistes par note (parallèle à _note_data)
 
         # ── État pan ────────────────────────────────────────────────
         self._pan_xy   = None   # position pixel au début du drag
@@ -394,6 +402,7 @@ class MapCanvas(FigureCanvas):
         self._contour_labels = []
         self._draw_track()
         self._redraw_photos()
+        self._redraw_notes()
         self._request_tiles()
         if self._contours_enabled:
             self._contour_timer.start()
@@ -846,6 +855,12 @@ class MapCanvas(FigureCanvas):
                     and not getattr(event, 'dblclick', False)):
                 self.photo_requested.emit(event.xdata, event.ydata)
             return
+        if self._note_mode:
+            if (event.button == 1 and event.inaxes == self.ax
+                    and event.xdata is not None
+                    and not getattr(event, 'dblclick', False)):
+                self.note_requested.emit(event.xdata, event.ydata)
+            return
         if self._measure_mode:
             if event.button == 1 and event.inaxes == self.ax and event.xdata is not None:
                 if getattr(event, 'dblclick', False):
@@ -859,6 +874,11 @@ class MapCanvas(FigureCanvas):
                     self._meas_timer.start()
             return
         if event.button == 1 and event.inaxes == self.ax and self._default_lim is not None:
+            # Clic sur une note → ouvre le dialogue d'édition
+            idx_note = self._find_note_at(event)
+            if idx_note is not None:
+                self.note_clicked.emit(idx_note)
+                return
             # Clic sur une annotation photo (croix ou miniature) → ouvre la visionneuse
             idx = self._find_photo_at(event, check_thumbnail=True)
             if idx is not None:
@@ -964,6 +984,7 @@ class MapCanvas(FigureCanvas):
                      zorder=11, markeredgecolor='white', markeredgewidth=1.5)
 
         self._redraw_photos()
+        self._redraw_notes()
         self._request_tiles()
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
@@ -1008,6 +1029,7 @@ class MapCanvas(FigureCanvas):
         self.ax.set_ylim(ylim)
 
         self._redraw_photos()
+        self._redraw_notes()
         self._request_tiles()
         self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
         self.draw()
@@ -1107,6 +1129,8 @@ class MapCanvas(FigureCanvas):
         self._measure_mode  = False
         self._photo_data    = []
         self._photo_artists = []
+        self._note_data     = []
+        self._note_artists  = []
         self._cursor_dot    = None
         self._cursor_annot  = None
         self._loading_text  = None
@@ -1803,7 +1827,100 @@ class MapCanvas(FigureCanvas):
                 except Exception:
                     pass
         self._redraw_photos()
+        self._redraw_notes()
         self.draw_idle()
+
+    # ── Notes ────────────────────────────────────────────────────────
+
+    def set_note_mode(self, active: bool):
+        self._note_mode = active
+        if active:
+            self.setCursor(Qt.CrossCursor)
+        elif not self._measure_mode and not self._photo_mode:
+            self.setCursor(Qt.OpenHandCursor)
+
+    def load_note_data(self, entries: list):
+        self._note_data    = entries
+        self._note_artists = []
+
+    def add_note_annotation(self, x_m: float, y_m: float,
+                             lat: float, lon: float,
+                             titre: str, description: str):
+        entry = {'x_m': x_m, 'y_m': y_m, 'lat': lat, 'lon': lon,
+                 'titre': titre, 'description': description}
+        self._note_data.append(entry)
+        artists = self._draw_note_annotation(x_m, y_m, titre)
+        self._note_artists.append(artists)
+        self.draw_idle()
+
+    def _draw_note_annotation(self, x_m: float, y_m: float, titre: str) -> list:
+        dot, = self.ax.plot(
+            x_m, y_m, 'o', color='#f39c12',
+            markersize=14, markeredgecolor='#c07d10',
+            markeredgewidth=1.5, zorder=14)
+        dot.pickradius = 14
+        # Icône stylo au centre
+        icon, = self.ax.plot(
+            x_m, y_m, marker=r'$\clubsuit$', color='white',
+            markersize=7, zorder=15, linestyle='none')
+        short = (titre[:22] + '…') if len(titre) > 22 else titre
+        lbl = self.ax.annotate(
+            short or '(sans titre)',
+            xy=(x_m, y_m), xytext=(0, 16),
+            textcoords='offset points',
+            ha='center', va='bottom', fontsize=8, color='#333',
+            zorder=16,
+            bbox=dict(boxstyle='round,pad=0.3', facecolor='#fffde7',
+                      edgecolor='#f39c12', alpha=0.92))
+        return [dot, icon, lbl]
+
+    def _redraw_notes(self):
+        self._note_artists = []
+        for entry in self._note_data:
+            artists = self._draw_note_annotation(
+                entry['x_m'], entry['y_m'], entry['titre'])
+            self._note_artists.append(artists)
+
+    def delete_note(self, index: int):
+        if index < len(self._note_artists):
+            for art in self._note_artists[index]:
+                try:
+                    art.remove()
+                except Exception:
+                    pass
+            self._note_artists.pop(index)
+        if index < len(self._note_data):
+            self._note_data.pop(index)
+        self.draw_idle()
+
+    def update_note(self, index: int, titre: str, description: str):
+        if index < len(self._note_data):
+            self._note_data[index]['titre'] = titre
+            self._note_data[index]['description'] = description
+        # Redessine uniquement cette note
+        if index < len(self._note_artists):
+            for art in self._note_artists[index]:
+                try:
+                    art.remove()
+                except Exception:
+                    pass
+            entry = self._note_data[index]
+            artists = self._draw_note_annotation(
+                entry['x_m'], entry['y_m'], titre)
+            self._note_artists[index] = artists
+        self.draw_idle()
+
+    def _find_note_at(self, event, radius_px: int = 18) -> 'int | None':
+        if not self._note_data or event.x is None or event.y is None:
+            return None
+        for i, entry in enumerate(self._note_data):
+            try:
+                dp = self.ax.transData.transform((entry['x_m'], entry['y_m']))
+                if math.hypot(event.x - dp[0], event.y - dp[1]) <= radius_px:
+                    return i
+            except Exception:
+                pass
+        return None
 
     def _find_photo_at(self, event, radius_px: int = 48,
                        check_thumbnail: bool = False) -> 'int | None':
@@ -1842,8 +1959,12 @@ class MapCanvas(FigureCanvas):
                 self.measure_mode_cancelled.emit()
             elif self._photo_mode:
                 self.photo_mode_changed.emit(False)
+            elif self._note_mode:
+                self.note_mode_changed.emit(False)
         elif event.key == 'p':
             self.photo_mode_changed.emit(not self._photo_mode)
+        elif event.key == 'n':
+            self.note_mode_changed.emit(not self._note_mode)
         elif event.key in ('v', 'w', 'x'):
             self._handle_eye_key(event.key)
 
