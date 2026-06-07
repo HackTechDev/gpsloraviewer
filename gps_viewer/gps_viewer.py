@@ -429,6 +429,9 @@ class MainWindow(QMainWindow):
             + (f' &nbsp;|&nbsp; Alt {gps.alt_min:.0f}–'
                f'{gps.alt_max:.0f} m'
                if gps.alt_min is not None else '')
+            + (f' &nbsp;|&nbsp; D+ {gps.elev_gain:.0f} m'
+               f' &nbsp; D− {gps.elev_loss:.0f} m'
+               if gps.elev_gain is not None else '')
             + f' &nbsp;|&nbsp; Vmax {gps.spd_max:.1f} km/h'
             + (f' &nbsp;|&nbsp; <i>({n_traces} traces)</i>' if n_traces > 1 else '')
         )
