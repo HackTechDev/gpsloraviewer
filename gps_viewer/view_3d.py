@@ -148,6 +148,7 @@ class View3DWindow(QDialog):
         self._anim_speed        = 1
         self._anim_dots: list    = []
         self._anim_shadows: list = []  # projection au sol de chaque dot
+        self._anim_vlines: list  = []  # lignes verticales dot ↔ shadow
         self._anim_traces: list  = []  # [(xs_rel, ys_rel, zs)] par trace
         self._anim_max_count    = 0
         self._scrub_was_playing = False
@@ -354,6 +355,7 @@ class View3DWindow(QDialog):
         self._anim_index   = 0
         self._anim_dots    = []
         self._anim_shadows = []
+        self._anim_vlines  = []
         self._anim_traces  = []
 
         self._cancel_fetch()
@@ -434,7 +436,7 @@ class View3DWindow(QDialog):
 
             # Projection de la trace sur le plan horizontal
             ax.plot(xs, ys, np.full(len(xs), z_floor),
-                    color=color, linewidth=0.9, alpha=0.30, zorder=1)
+                    color=color, linewidth=1.2, alpha=0.65, zorder=1)
 
             legend_handles.append(
                 Line2D([0], [0], color=color, linewidth=2, label=gps.filename))
@@ -493,6 +495,12 @@ class View3DWindow(QDialog):
                                 color=color, s=35, marker='o',
                                 alpha=0.55, depthshade=False, zorder=2)
             self._anim_shadows.append(shadow)
+            vline, = ax.plot([float(xs_rel[0]), float(xs_rel[0])],
+                             [float(ys_rel[0]), float(ys_rel[0])],
+                             [z_floor, float(zs[0])],
+                             color=color, linewidth=1.2, alpha=0.70,
+                             linestyle='--', zorder=4)
+            self._anim_vlines.append(vline)
 
         # ── Init scrubber ─────────────────────────────────────────────
         self._anim_btn.blockSignals(True)
@@ -789,10 +797,12 @@ class View3DWindow(QDialog):
     def _update_anim_dots(self, index: int):
         if not self._fig.axes or not self._anim_dots:
             return
-        for (xs_rel, ys_rel, zs), dot, shadow in zip(
-                self._anim_traces, self._anim_dots, self._anim_shadows):
+        for (xs_rel, ys_rel, zs), dot, shadow, vline in zip(
+                self._anim_traces, self._anim_dots,
+                self._anim_shadows, self._anim_vlines):
             idx = min(index, len(xs_rel) - 1)
             x, y, z = float(xs_rel[idx]), float(ys_rel[idx]), float(zs[idx])
             dot._offsets3d    = ([x], [y], [z])
             shadow._offsets3d = ([x], [y], [self._z_floor])
+            vline.set_data_3d([x, x], [y, y], [self._z_floor, z])
         self._canvas.draw_idle()
