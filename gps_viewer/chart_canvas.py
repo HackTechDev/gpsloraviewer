@@ -16,6 +16,10 @@ C_SPD    = '#27ae60'
 C_CURSOR = '#e74c3c'
 
 
+def _fmt_dist(d: float) -> str:
+    return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  Canvas Graphique  (altitude ou vitesse)
 # ══════════════════════════════════════════════════════════════════════
@@ -29,8 +33,10 @@ class ChartCanvas(FigureCanvas):
         self._title = title
         self._color = color
         self._on_hover = on_hover
-        self._vline    = None
-        self._dist_arr = None
+        self._vline        = None
+        self._dist_arr     = None
+        self._total_dist   = None
+        self._cursor_annot = None
         self._draw_empty()
         self.mpl_connect('motion_notify_event', self._mouse_move)
         self.mpl_connect('axes_leave_event',    lambda _: on_hover(None))
@@ -56,7 +62,9 @@ class ChartCanvas(FigureCanvas):
         self.draw()
 
     def load(self, distances: list, data: list, ylabel: str, info: str = ''):
-        self._dist_arr = np.array(distances)
+        self._dist_arr     = np.array(distances)
+        self._total_dist   = float(distances[-1]) if distances else None
+        self._cursor_annot = None  # ax.cla() invalide l'ancien artist
         self.ax.cla()
         self._style_ax()
         self.ax.set_ylabel(ylabel, fontsize=9, color='#888', labelpad=3)
@@ -93,8 +101,10 @@ class ChartCanvas(FigureCanvas):
         """Superpose plusieurs traces sur le même graphique.
         series : list of (distances, data, label, color)
         """
-        self._dist_arr = None
-        self._vline    = None
+        self._dist_arr     = None
+        self._vline        = None
+        self._total_dist   = None
+        self._cursor_annot = None
         self.ax.cla()
         self._style_ax()
         self.ax.set_ylabel(ylabel, fontsize=9, color='#888', labelpad=3)
@@ -128,18 +138,41 @@ class ChartCanvas(FigureCanvas):
         self.draw()
 
     def clear(self):
-        self._dist_arr = None
-        self._vline    = None
+        self._dist_arr     = None
+        self._vline        = None
+        self._total_dist   = None
+        self._cursor_annot = None
         self._draw_empty()
 
     def update_cursor(self, index):
         if self._vline is None or self._dist_arr is None:
             return
         if index is not None and 0 <= index < len(self._dist_arr):
-            self._vline.set_xdata([self._dist_arr[index]])
+            x = float(self._dist_arr[index])
+            self._vline.set_xdata([x])
             self._vline.set_visible(True)
+            if self._total_dist is not None:
+                remaining = self._total_dist - x
+                txt = f'↑ {_fmt_dist(x)}   ↓ {_fmt_dist(remaining)}'
+                ha  = 'left' if index < len(self._dist_arr) * 0.6 else 'right'
+                if self._cursor_annot is None:
+                    self._cursor_annot = self.ax.text(
+                        x, 0.97, txt,
+                        transform=self.ax.get_xaxis_transform(),
+                        ha=ha, va='top', fontsize=8, color='#444',
+                        bbox=dict(boxstyle='round,pad=0.3',
+                                  facecolor='#fff8e8', edgecolor='#e0c070',
+                                  alpha=0.92),
+                        zorder=6)
+                else:
+                    self._cursor_annot.set_x(x)
+                    self._cursor_annot.set_text(txt)
+                    self._cursor_annot.set_ha(ha)
+                    self._cursor_annot.set_visible(True)
         else:
             self._vline.set_visible(False)
+            if self._cursor_annot is not None:
+                self._cursor_annot.set_visible(False)
         self.draw_idle()
 
     def _mouse_move(self, event):

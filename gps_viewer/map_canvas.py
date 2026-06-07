@@ -37,6 +37,11 @@ _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 cx.set_cache_dir(str(_TILE_CACHE_DIR))
 
 
+def _fmt_dist(d: float) -> str:
+    """Formate une distance : km si ≥ 1 000 m, sinon mètres."""
+    return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
+
+
 def _cache_size_mb() -> float:
     """Retourne la taille du cache de tuiles en Mo."""
     return sum(f.stat().st_size for f in _TILE_CACHE_DIR.rglob('*') if f.is_file()) / 1_048_576
@@ -239,7 +244,8 @@ class MapCanvas(FigureCanvas):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.ax = self.fig.add_axes([0, 0, 1, 1])
         self.ax.set_axis_off()
-        self._cursor_dot  = None
+        self._cursor_dot   = None
+        self._cursor_annot = None   # annotation distance parcouru/restant
         self._gps: GPSData | None = None
         self._gps_list: list      = []
         self._default_lim = None   # (xlim, ylim) pour reset
@@ -399,6 +405,13 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot, = self.ax.plot([], [], 'o',
             color=C_CURSOR, markersize=12, zorder=10,
             markeredgecolor='white', markeredgewidth=1.5, visible=False)
+        self._cursor_annot = self.ax.annotate(
+            '', xy=(0, 0), xycoords='data',
+            xytext=(14, 8), textcoords='offset points',
+            color='white', fontsize=8.5,
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#1a2535',
+                      edgecolor=C_CURSOR, alpha=0.92),
+            zorder=12, visible=False)
         if self._track_mode != 'flat':
             self._draw_colorbar()
         self._apply_track_filter()
@@ -905,6 +918,7 @@ class MapCanvas(FigureCanvas):
         self._gps              = None
         self._gps_list         = []
         self._cursor_dot       = None
+        self._cursor_annot     = None
         self._loading_text     = None
         self._track_artists    = []
         self._track_markers    = []
@@ -953,6 +967,8 @@ class MapCanvas(FigureCanvas):
         self._loading_text     = None
         self._gps              = None
         self._gps_list         = []
+        self._cursor_dot       = None
+        self._cursor_annot     = None
         self._track_artists    = []
         self._track_markers    = []
         self._track_filter_idx = None
@@ -1001,15 +1017,24 @@ class MapCanvas(FigureCanvas):
         self.ax.legend(loc='upper left', fontsize=9,
                        framealpha=0.85, fancybox=True)
 
-        # Nouveau cursor dot pour cette trace (supprime l'ancien)
-        if self._cursor_dot is not None:
-            try:
-                self._cursor_dot.remove()
-            except Exception:
-                pass
+        # Nouveau cursor dot + annotation pour cette trace (supprime les anciens)
+        for attr in ('_cursor_dot', '_cursor_annot'):
+            old = getattr(self, attr, None)
+            if old is not None:
+                try:
+                    old.remove()
+                except Exception:
+                    pass
         self._cursor_dot, = self.ax.plot([], [], 'o',
             color=C_CURSOR, markersize=12, zorder=10,
             markeredgecolor='white', markeredgewidth=1.5, visible=False)
+        self._cursor_annot = self.ax.annotate(
+            '', xy=(0, 0), xycoords='data',
+            xytext=(14, 8), textcoords='offset points',
+            color='white', fontsize=8.5,
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#1a2535',
+                      edgecolor=C_CURSOR, alpha=0.92),
+            zorder=12, visible=False)
 
         # Étend _default_lim pour englober la nouvelle trace
         mg = max(100, (gps.xs.max() - gps.xs.min()) * 0.18,
@@ -1064,6 +1089,7 @@ class MapCanvas(FigureCanvas):
         self._photo_data    = []
         self._photo_artists = []
         self._cursor_dot    = None
+        self._cursor_annot  = None
         self._loading_text  = None
         self.ax.cla()
         self.ax.set_axis_off()
@@ -1230,11 +1256,21 @@ class MapCanvas(FigureCanvas):
         if self._cursor_dot is None or self._gps is None:
             return
         if index is not None and 0 <= index < self._gps.count:
-            self._cursor_dot.set_data([self._gps.xs[index]],
-                                      [self._gps.ys[index]])
+            x = float(self._gps.xs[index])
+            y = float(self._gps.ys[index])
+            self._cursor_dot.set_data([x], [y])
             self._cursor_dot.set_visible(True)
+            if self._cursor_annot is not None:
+                dist      = self._gps.distances[index]
+                remaining = self._gps.total_dist - dist
+                self._cursor_annot.xy = (x, y)
+                self._cursor_annot.set_text(
+                    f'↑ {_fmt_dist(dist)}\n↓ {_fmt_dist(remaining)}')
+                self._cursor_annot.set_visible(True)
         else:
             self._cursor_dot.set_visible(False)
+            if self._cursor_annot is not None:
+                self._cursor_annot.set_visible(False)
         self.draw_idle()
 
     # ── Mesure de distance ───────────────────────────────────────────
