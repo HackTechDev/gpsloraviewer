@@ -8,13 +8,16 @@
 4. [Ouvrir un parcours existant](#4-ouvrir-un-parcours-existant)
 5. [Ajouter des traces GPS](#5-ajouter-des-traces-gps)
 6. [La carte interactive](#6-la-carte-interactive)
-7. [Les graphiques](#7-les-graphiques)
-8. [Le panneau de statistiques](#8-le-panneau-de-statistiques)
-9. [Les annotations photo](#9-les-annotations-photo)
-10. [Outils cartographiques](#10-outils-cartographiques)
-11. [Enregistrer et gérer les fichiers](#11-enregistrer-et-gérer-les-fichiers)
-12. [Raccourcis clavier](#12-raccourcis-clavier)
-13. [Maintenance](#13-maintenance)
+7. [La barre de lecture « Suivre »](#7-la-barre-de-lecture--suivre-)
+8. [Les graphiques](#8-les-graphiques)
+9. [Le panneau de statistiques](#9-le-panneau-de-statistiques)
+10. [Les annotations photo](#10-les-annotations-photo)
+11. [Outils cartographiques](#11-outils-cartographiques)
+12. [La vue 3D](#12-la-vue-3d)
+13. [Le menu Paramétrage](#13-le-menu-paramétrage)
+14. [Enregistrer et gérer les fichiers](#14-enregistrer-et-gérer-les-fichiers)
+15. [Raccourcis clavier](#15-raccourcis-clavier)
+16. [Maintenance](#16-maintenance)
 
 ---
 
@@ -24,7 +27,9 @@ GPS Viewer est une application desktop de visualisation de traces GPS. Elle perm
 
 - charger une ou plusieurs traces GPS au format NMEA (`.txt`) sur une carte interactive ;
 - comparer les profils altimétriques et de vitesse de chaque trace ;
+- suivre automatiquement un parcours avec la barre de lecture ;
 - annoter la carte avec des photos géolocalisées ;
+- visualiser le parcours en trois dimensions avec courbes de niveau ;
 - sauvegarder l'ensemble (traces + annotations) dans un fichier **parcours** (`.json`).
 
 ### Concept de « parcours »
@@ -107,9 +112,14 @@ Répétez l'opération autant de fois que nécessaire. Chaque trace est affiché
 
 Une **légende** apparaît en haut à gauche de la carte avec le nom de chaque fichier.
 
-### Sélectionner la trace affichée dans les graphiques
+### Sélectionner la trace analysée
 
-Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :** apparaît dans la barre d'outils. Choisissez la trace dont vous souhaitez voir le profil altimétrique, la courbe de vitesse et les statistiques. Le curseur sur la carte se synchronise avec la trace sélectionnée.
+Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :** apparaît dans la barre d'outils :
+
+| Choix | Effet sur la carte | Effet sur les graphiques |
+|-------|-------------------|--------------------------|
+| Nom d'une trace | Seule cette trace est visible | Profils altimétrique et vitesse de cette trace uniquement |
+| **Toutes les traces GPS** | Toutes les traces sont affichées | Les profils de toutes les traces sont superposés avec légende |
 
 ---
 
@@ -119,13 +129,13 @@ Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :**
 
 | Geste | Action |
 |-------|--------|
-| Molette souris | Zoom avant / arrière |
+| Molette souris | Zoom avant / arrière centré sur le pointeur |
 | Clic-glisser | Déplacer la vue (pan) |
-| Bouton **⌂ Recentrer** (`Ctrl+R`) | Revenir à la vue initiale centrée sur la trace |
+| Bouton **⌂ Recentrer** (`Ctrl+R`) | Revenir à la vue initiale centrée sur toutes les traces |
 
 ### Fonds de carte
 
-Le bouton **🗺 Fond de carte** (`Ctrl+T`) dans la barre d'outils permet de choisir parmi :
+Le bouton **🗺 Fond de carte** dans la barre d'outils permet de choisir parmi :
 
 | Source | Description |
 |--------|-------------|
@@ -146,19 +156,64 @@ Le bouton **🎨 Trace** dans la barre d'outils propose trois modes de coloratio
 | 🏔 Altitude | Gradient bleu → vert → jaune → rouge selon l'altitude |
 | ⚡ Vitesse | Gradient vert → orange → rouge selon la vitesse |
 
+### Boîte d'informations du curseur
+
+Lorsque le curseur rouge se déplace sur la trace (via les graphiques ou la barre de lecture), une **boîte sombre** apparaît à côté du point rouge et affiche :
+
+| Icône | Information |
+|-------|-------------|
+| ↑ | Distance parcourue depuis le départ |
+| ↓ | Distance restante jusqu'à l'arrivée |
+| ⏱ | Temps écoulé depuis le départ (ex : `42 min` ou `1h 07min`) |
+| 🕐 | Heure GPS au point courant (HH:MM) |
+
+Cette boîte est masquable via **Paramétrage → Afficher distance parcourue / restante**.
+
 ---
 
-## 7. Les graphiques
+## 7. La barre de lecture « Suivre »
+
+La barre de lecture apparaît **automatiquement** en bas de la carte dès qu'une trace GPS est chargée.
+
+### Contrôles
+
+| Bouton | Description |
+|--------|-------------|
+| ⏮ | Revenir au point de départ |
+| ▶ | Démarrer la lecture (le bouton devient ⏸) |
+| ⏸ | Mettre en pause |
+| Compteur | Affiche la position courante / nombre total de points |
+| × 1 / × 2 / × 5 / × 10 | Sélectionner la vitesse de lecture |
+
+### Pan automatique
+
+Pendant la lecture, si le curseur rouge sort de la zone visible (ou dépasse la marge configurée), la carte se **recentre automatiquement** sur le curseur en conservant le niveau de zoom.
+
+La marge de déclenchement est configurable dans **Paramétrage → Préférences…** (paramètre *Marge auto-pan*, en pixels).
+
+### Synchronisation
+
+Pendant la lecture, le curseur des deux graphiques et les valeurs du panneau statistiques (bloc CURSEUR) sont mis à jour en temps réel.
+
+---
+
+## 8. Les graphiques
 
 ### Profil altimétrique et profil de vitesse
 
 Les deux graphiques en bas de fenêtre affichent respectivement :
-- l'**altitude** (en mètres) en fonction de la distance parcourue ;
-- la **vitesse** (en km/h, lissée sur 5 points) en fonction de la distance.
+- l'**altitude** (en mètres) en fonction de la distance parcourue ; une boîte de texte indique le D+ et le D−
+- la **vitesse** (en km/h, lissée sur 5 points) en fonction de la distance
 
 ### Curseur synchronisé
 
-Survolez un graphique avec la souris : un **curseur rouge** se déplace simultanément sur le graphique et sur la trace GPS dans la carte. Le panneau de statistiques à droite affiche les valeurs en temps réel à la position du curseur (heure, coordonnées, altitude, vitesse, distance, nombre de satellites).
+Survolez un graphique avec la souris : un **trait rouge vertical** se déplace simultanément sur le graphique et le curseur rouge se positionne sur la trace GPS dans la carte. Le panneau de statistiques à droite affiche les valeurs en temps réel.
+
+Une **boîte d'annotation** flottante s'affiche sur chaque graphique avec la même information que la boîte de la carte (distance parcourue, distance restante, temps écoulé, heure GPS).
+
+### Mode multi-traces
+
+Quand **Toutes les traces GPS** est sélectionné dans le combo **📊 Graphiques :**, les deux graphiques superposent les profils de toutes les traces avec une légende et des couleurs distinctes. Le curseur n'est pas actif dans ce mode.
 
 ### Changer la trace affichée
 
@@ -166,7 +221,7 @@ Utilisez le sélecteur **📊 Graphiques :** dans la barre d'outils (visible ave
 
 ---
 
-## 8. Le panneau de statistiques
+## 9. Le panneau de statistiques
 
 Le panneau à droite affiche deux blocs :
 
@@ -180,15 +235,19 @@ Le panneau à droite affiche deux blocs :
 | Durée | Durée totale de l'enregistrement |
 | Altitude min / max | Altitudes extrêmes |
 | Alt. moyenne | Altitude moyenne |
+| D+ montée | Dénivelé positif cumulé (seuil 3 m) |
+| D− descente | Dénivelé négatif cumulé (seuil 3 m) |
 | Vitesse max | Vitesse maximale enregistrée |
 | Vitesse moy. | Vitesse moyenne |
 
-**CURSEUR** — valeurs en temps réel lors du survol d'un graphique :
+**CURSEUR** — valeurs en temps réel lors du survol d'un graphique ou pendant la lecture :
 heure GPS, latitude, longitude, altitude, vitesse, distance cumulée, nombre de satellites.
+
+> Le D+ et le D− sont également affichés dans la **barre d'outils** (en haut) et dans la **barre d'état** (en bas de fenêtre).
 
 ---
 
-## 9. Les annotations photo
+## 10. Les annotations photo
 
 ### Placer une photo
 
@@ -203,6 +262,8 @@ heure GPS, latitude, longitude, altitude, vitesse, distance cumulée, nombre de 
 
 Cliquez sur la croix rouge ou la miniature d'une annotation pour ouvrir la **visionneuse** :
 - aperçu de la photo en plein format ;
+- **métadonnées EXIF** : date de prise, modèle d'appareil, focale (si disponibles) ;
+- boutons de **rotation** ↶ (−90°) et ↷ (+90°) pour corriger l'orientation de la photo ;
 - champs **Titre** et **Description** éditables ;
 - bouton **Supprimer** pour retirer l'annotation (les fichiers image sont également supprimés).
 
@@ -219,7 +280,7 @@ L'indicateur de direction matérialise l'angle de vue au moment de la prise de p
 
 ---
 
-## 10. Outils cartographiques
+## 11. Outils cartographiques
 
 ### Grille de coordonnées (`Ctrl+L`)
 
@@ -244,11 +305,83 @@ Outil de mesure clic-à-clic :
 
 **Navigation → Aller aux coordonnées…** ou bouton **📍 Coordonnées**.
 
-Saisissez une latitude et une longitude décimales, choisissez le niveau de zoom, et la carte se centre sur ce point avec un repère rouge.
+Saisissez une latitude et une longitude décimales (ou collez `48.8566, 2.3522`), choisissez le niveau de zoom, et la carte se centre sur ce point avec un repère rouge.
 
 ---
 
-## 11. Enregistrer et gérer les fichiers
+## 12. La vue 3D
+
+**Navigation → Vue 3D** (`Ctrl+3`) ouvre une fenêtre 3D indépendante et non bloquante.
+
+- La fenêtre affiche toutes les traces GPS chargées avec les axes Est / Nord (en mètres) et l'axe Altitude.
+- Les marqueurs **●** (départ) et **■** (arrivée) sont visibles pour chaque trace.
+- Une **barre de statistiques** en bas indique pour chaque trace : distance, D+, D−, altitude min–max.
+
+### Modes de coloration
+
+Sélectionnables via les boutons en haut de la fenêtre :
+
+| Mode | Description |
+|------|-------------|
+| Couleur unie | Couleur fixe par trace |
+| 🏔 Altitude | Gradient selon l'altitude, colorbar affichée |
+| ⚡ Vitesse | Gradient selon la vitesse, colorbar affichée |
+
+### Fond de carte OSM
+
+Le bouton **🗺 Fond OSM** ajoute un plan OpenStreetMap en base de la scène 3D :
+- Masqué automatiquement pendant la rotation pour la fluidité, réaffiché au relâchement.
+- Trois résolutions disponibles : **Basse** (64 px), **Moyenne** (128 px), **Haute** (256 px).
+
+### Courbes de niveau SRTM
+
+Le bouton **🏔 Courbes** calcule et affiche les courbes de niveau issues des données d'altitude SRTM, espacées de 50 m, avec étiquettes d'altitude sur la carte.
+
+### Navigation 3D
+
+| Geste | Action |
+|-------|--------|
+| Clic-glisser | Rotation de la caméra |
+| Molette | Zoom avant / arrière |
+| Bouton **⌂ Réinitialiser la vue** | Retour à l'angle par défaut (élév. 25°, azim. −60°) |
+
+> La caméra ne peut pas passer sous le plan horizontal (élévation ≥ 0°).
+
+---
+
+## 13. Le menu Paramétrage
+
+### Afficher distance parcourue / restante
+
+Bascule cochée par défaut. Décochez pour masquer la **boîte d'informations** (distance, temps, heure) à côté du curseur rouge sur la carte et dans les graphiques.
+
+### Préférences… (`Ctrl+,`)
+
+La boîte de dialogue Préférences applique chaque modification **immédiatement** (pas besoin de valider).
+
+**Paramètres Carte**
+
+| Paramètre | Valeur par défaut | Description |
+|-----------|-------------------|-------------|
+| Épaisseur de la trace | 2,5 px | Épaisseur du trait GPS sur la carte |
+| Opacité fond de carte | 100 % | Transparence des tuiles (glissière 0–100 %) |
+| Taille icônes photo | 0,8 | Facteur de zoom des miniatures sur la carte |
+| Taille croix photo | 16 px | Taille de la croix rouge des annotations photo |
+| Taille curseur rouge | 12 px | Diamètre du point rouge se déplaçant sur la trace |
+| Marge auto-pan | 0 px | Distance au bord déclenchant le recentrage automatique pendant la lecture (0 = seulement quand le curseur sort de la vue) |
+
+**Paramètre Général**
+
+| Paramètre | Description |
+|-----------|-------------|
+| Mémoriser la mise en page | Si coché, la taille de la fenêtre et la position des séparateurs sont restaurées à la prochaine ouverture |
+
+> Les préférences sont enregistrées dans `~/.config/gps_viewer/settings.json`.
+> La mise en page est enregistrée dans `~/.config/gps_viewer/layout.json`.
+
+---
+
+## 14. Enregistrer et gérer les fichiers
 
 | Action | Raccourci | Description |
 |--------|-----------|-------------|
@@ -266,7 +399,7 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 
 ---
 
-## 12. Raccourcis clavier
+## 15. Raccourcis clavier
 
 | Raccourci | Action |
 |-----------|--------|
@@ -281,6 +414,8 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 | `Ctrl+M` | Afficher / masquer la miniature |
 | `Ctrl+D` | Activer / désactiver l'outil de mesure |
 | `Ctrl+G` | Naviguer vers des coordonnées |
+| `Ctrl+3` | Ouvrir / fermer la vue 3D |
+| `Ctrl+,` | Ouvrir les Préférences |
 | `Ctrl+Q` | Quitter |
 | `P` | Activer / désactiver le mode annotation photo |
 | `V` | Afficher / masquer l'indicateur de direction (œil) |
@@ -290,7 +425,7 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 
 ---
 
-## 13. Maintenance
+## 16. Maintenance
 
 ### Cache de tuiles
 
@@ -305,20 +440,27 @@ Les tuiles cartographiques sont stockées dans `~/.cache/gps_viewer/tiles/`.
 |---------|---------|
 | `~/.config/gps_viewer/last_track.txt` | Chemin du dernier parcours ouvert |
 | `~/.config/gps_viewer/recent_tracks.json` | Liste des 10 derniers parcours utilisés |
+| `~/.config/gps_viewer/settings.json` | Préférences (épaisseur trace, opacité, tailles, marge auto-pan…) |
+| `~/.config/gps_viewer/layout.json` | Mise en page (taille fenêtre, position des séparateurs) |
 | `~/.cache/gps_viewer/tiles/` | Cache persistant des tuiles cartographiques |
 
 ### Structure des fichiers du projet
 
 ```
 gpslora/
-├── gps_viewer.py      # Fenêtre principale + point d'entrée
-├── map_canvas.py      # Widget carte (matplotlib + contextily)
-├── chart_canvas.py    # Graphiques altitude / vitesse
-├── stats_panel.py     # Panneau de statistiques
-├── gps_nmea.py        # Parseur NMEA et modèle de données GPS
-├── dialogs.py         # Boîtes de dialogue (coordonnées, photo, parcours)
-├── logo.png           # Logo du splash screen (à créer)
-├── run.sh             # Script de lancement
-└── tracks/
-    └── images/        # Photos annotées et leurs miniatures
+├── gps_viewer/
+│   ├── gps_viewer.py      # Fenêtre principale + point d'entrée
+│   ├── map_canvas.py      # Widget carte (matplotlib + contextily)
+│   ├── chart_canvas.py    # Graphiques altitude / vitesse
+│   ├── stats_panel.py     # Panneau de statistiques
+│   ├── gps_nmea.py        # Parseur NMEA et modèle de données GPS
+│   ├── dialogs.py         # Boîtes de dialogue (coordonnées, photo, parcours, préférences)
+│   ├── view_3d.py         # Vue 3D (matplotlib mpl_toolkits)
+│   ├── lora_receiver.py   # Réception trames LoRa via port série
+│   ├── logo.png           # Logo du splash screen (à créer)
+│   ├── run.sh             # Script de lancement
+│   └── tracks/
+│       └── images/        # Photos annotées et leurs miniatures
+├── gps_lora_logger/       # Firmware Arduino émetteur terrain
+└── rf95_server/           # Firmware Arduino récepteur base LoRa
 ```

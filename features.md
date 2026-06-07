@@ -48,7 +48,15 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
 - Filtrage automatique des trames invalides (`fix_quality = 0`)
 - Chaque trace affiche un marqueur de **départ** (cercle) et d'**arrivée** (carré) dans sa couleur
 - La légende indique le nom de chaque fichier
-- **Sélecteur de trace** : dès que deux traces ou plus sont chargées, un sélecteur `📊 Graphiques :` apparaît dans la barre d'outils pour choisir quelle trace est analysée dans les graphiques, les statistiques et le curseur carte
+
+### Sélecteur de trace (Graphiques)
+
+Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :** apparaît dans la barre d'outils :
+
+| Choix | Effet |
+|-------|-------|
+| Nom d'une trace | Affiche uniquement cette trace sur la carte OSM ; graphiques et statistiques la concernent |
+| **Toutes les traces GPS** | Toutes les traces sont visibles sur la carte ; les graphiques superposent les profils de chaque trace avec légende et couleurs distinctes |
 
 ## Carte
 
@@ -91,6 +99,37 @@ Une colorbar est affichée en incrustation pour les modes dégradés.
   - Plusieurs mesures simultanées possibles ; Échap pour tout effacer
   - Distances affichées en mètres (< 1 km) ou kilomètres (3 décimales)
 
+## Curseur rouge et barre de lecture
+
+### Curseur rouge
+
+Le curseur rouge (point) se déplace sur la trace GPS lors du survol des graphiques ou pendant la lecture automatique. À côté du curseur une **boîte d'informations** affiche :
+
+| Ligne | Contenu |
+|-------|---------|
+| ↑ | Distance parcourue depuis le départ |
+| ↓ | Distance restante jusqu'à l'arrivée |
+| ⏱ | Temps écoulé depuis le départ (min ou h min) |
+| 🕐 | Heure GPS au point courant (HH:MM) |
+
+La boîte est masquable via **Paramétrage → Afficher distance parcourue / restante**.
+
+La même information apparaît dans les annotations des deux graphiques (profil altimétrique et vitesse).
+
+### Barre de lecture « Suivre »
+
+Visible en bas de la carte dès qu'une trace GPS est chargée :
+
+| Contrôle | Description |
+|----------|-------------|
+| ⏮ | Retour au début |
+| ▶ / ⏸ | Lecture / pause |
+| Compteur | Index du point courant / total |
+| × 1 / × 2 / × 5 / × 10 | Vitesse de lecture |
+
+- **Pan automatique** : si le curseur sort de la zone visible (ou de la marge configurée), la carte se recentre automatiquement en conservant le niveau de zoom.
+- L'émission du signal `playback_index_changed` synchronise le curseur des graphiques et le panneau statistiques en temps réel.
+
 ## Annotations photo
 
 - **Mode photo** : bouton `📷 Photo` ou touche `P` — le curseur devient une croix
@@ -100,6 +139,8 @@ Une colorbar est affichée en incrustation pour les modes dégradés.
 - **Clic sur la croix ou la miniature** → visionneuse plein format avec :
   - Affichage de l'image (jusqu'à 90 % de l'écran)
   - Coordonnées GPS et chemin du fichier
+  - Métadonnées **EXIF** : date de prise, modèle d'appareil, focale
+  - Boutons de **rotation** ↶ ↷ (−90° / +90°) sans quitter l'application
   - Champs titre et description éditables
   - Bouton Supprimer (supprime les fichiers + l'entrée JSON)
 - **Indicateur de direction** (œil) : survoler une annotation puis :
@@ -110,9 +151,11 @@ Une colorbar est affichée en incrustation pour les modes dégradés.
 
 ## Graphiques
 
-- **Profil altimétrique** : altitude en mètres en fonction de la distance parcourue
+- **Profil altimétrique** : altitude en mètres en fonction de la distance parcourue ; une boîte de texte indique le D+ et le D− de la trace sélectionnée
 - **Profil de vitesse** : vitesse en km/h calculée par différentiel Haversine entre trames successives, lissée sur 5 points
+- **Mode multi-traces** : quand « Toutes les traces GPS » est sélectionné, les deux graphiques superposent les profils de toutes les traces avec une légende et des couleurs distinctes
 - Curseur rouge synchronisé : survoler un graphique déplace le repère sur la carte et réciproquement
+- **Annotation curseur** : boîte flottante sur chaque graphique avec distance parcouru/restant, temps écoulé et heure GPS
 
 ## Panneau de statistiques
 
@@ -125,9 +168,14 @@ Affiché en permanence à droite de la carte :
 | Distance | Distance totale parcourue (mètres) |
 | Durée | Durée de l'enregistrement (h/min/s) |
 | Altitude min / max / moyenne | En mètres |
-| Vitesse max / moyenne | En km/h |
+| D+ montée | Dénivelé positif cumulé (seuil 3 m) |
+| D− descente | Dénivelé négatif cumulé (seuil 3 m) |
+| Vitesse max | En km/h |
+| Vitesse moy. | En km/h |
 
 **Bloc curseur** : au survol d'un graphique, affiche en temps réel l'heure, la latitude, la longitude, l'altitude, la vitesse, la distance et le nombre de satellites pour le point courant.
+
+La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent également le D+ et le D−.
 
 ## Navigation par coordonnées
 
@@ -144,6 +192,7 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 
 - Axes **Est / Nord** en mètres (coordonnées Web Mercator centrées sur le centroïde), axe **Altitude** en mètres
 - Marqueurs départ (●) et arrivée (■) pour chaque trace
+- **Barre de statistiques** en bas de la fenêtre 3D : nom, distance, D+, D−, altitude min–max pour chaque trace
 - Trois **modes de coloration** :
 
 | Mode | Description |
@@ -152,13 +201,44 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 | 🏔 Altitude | Gradient de couleur selon l'altitude (colorbar affichée) |
 | ⚡ Vitesse | Gradient de couleur selon la vitesse (colorbar affichée) |
 
+- **Courbes de niveau SRTM** : bouton `🏔 Courbes` — calcule et affiche les courbes de niveau issues des données SRTM (toutes les 50 m par défaut), avec étiquettes d'altitude
 - **Fond de carte OSM** : tuiles OpenStreetMap affichées comme plan horizontal à la base de la scène, téléchargées en arrière-plan (`QThread`) sans bloquer l'interface
   - Bouton toggle `🗺 Fond OSM` pour afficher / masquer
-  - **Sélecteur de résolution** : Basse (64 px / 4 096 polygones), Moyenne (128 px), Haute (256 px) — le changement de résolution est instantané (rééchantillonnage depuis l'image brute mise en cache, sans re-téléchargement)
+  - **Sélecteur de résolution** : Basse (64 px / 4 096 polygones), Moyenne (128 px), Haute (256 px) — changement instantané sans re-téléchargement
   - La surface OSM est automatiquement masquée pendant la rotation pour garantir la fluidité, et réaffichée au relâchement
 - **Rotation fluide** : la caméra ne peut pas passer sous le plan horizontal (élévation clampée à ≥ 0°)
+- **Zoom à la molette** dans la vue 3D
 - Bouton `⌂ Réinitialiser la vue` pour revenir à l'angle par défaut (élev 25°, azim −60°)
 - La fenêtre se met à jour automatiquement lors de l'ajout d'une nouvelle trace
+
+## Menu Paramétrage
+
+### Afficher distance parcourue / restante
+
+Bascule (coché par défaut) : affiche ou masque la boîte sombre à côté du curseur rouge sur la carte et dans les deux graphiques.
+
+### Préférences… (Ctrl+,)
+
+Boîte de dialogue avec **application immédiate** de chaque paramètre :
+
+**Carte**
+
+| Paramètre | Valeur par défaut | Description |
+|-----------|-------------------|-------------|
+| Épaisseur de la trace | 2,5 px | Épaisseur du trait GPS sur la carte |
+| Opacité du fond de carte | 100 % | Transparence des tuiles cartographiques (0 = invisible, 100 % = opaque) |
+| Taille icônes photo | 0,8 | Facteur de zoom des miniatures photo sur la carte |
+| Taille croix photo | 16 px | Taille de la croix rouge marquant chaque photo |
+| Taille curseur rouge | 12 px | Diamètre du point rouge se déplaçant sur la trace |
+| Marge auto-pan | 0 px | Distance au bord (en pixels) déclenchant le recentrage automatique pendant la lecture (0 = recentrage dès que le curseur sort de la vue) |
+
+**Général**
+
+| Paramètre | Description |
+|-----------|-------------|
+| Mémoriser la mise en page | Sauvegarde et restaure la taille de la fenêtre et la position des séparateurs entre sessions |
+
+Les préférences sont persistées dans `~/.config/gps_viewer/settings.json`.
 
 ## Performances
 

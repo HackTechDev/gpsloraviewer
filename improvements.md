@@ -20,6 +20,7 @@
 
 ## Vue 3D
 
+- ~~**Courbes de niveau SRTM**~~ ✅ Implémenté — bouton `🏔 Courbes`, données SRTM, courbes toutes les 50 m avec étiquettes
 - **Exagération verticale configurable** : slider pour multiplier l'axe Z et rendre le relief plus lisible sur les terrains plats
 - **Extrusion du profil altimétrique** : afficher les murs verticaux sous la trace pour mieux visualiser le dénivelé
 - **Animation** : rejouer le parcours sous forme d'un point se déplaçant sur la trace en 3D avec boutons play/pause/vitesse
@@ -33,7 +34,6 @@
 - **Lissage variable** : slider pour ajuster la fenêtre de lissage (3 à 21 points) en temps réel
 - **Zoom sur intervalle** : cliquer-glisser sur un graphique pour zoomer sur un segment de la trace
 - **Double-clic pour réinitialiser le zoom**
-- **Tooltip au survol** : afficher la valeur exacte + temps + distance au point le plus proche du curseur
 - **Annotations des points remarquables** : étiquettes automatiques sur le sommet (altitude max), le point le plus rapide, etc.
 - **Graphique de pente** : pourcentage de pente calculé à partir de l'altitude et de la distance
 - **Axe temporel** : option pour afficher les graphiques en fonction du temps au lieu de la distance
@@ -42,7 +42,7 @@
 
 ## Statistiques
 
-- **Gain altimétrique** : afficher le cumul de montée et de descente (D+ / D−)
+- ~~**Gain altimétrique D+ / D−**~~ ✅ Implémenté — affiché dans le panneau stats, la barre d'outils, la barre d'état et la vue 3D ; seuil 3 m pour filtrer le bruit GPS
 - **Pente moyenne** : pourcentage moyen sur l'ensemble du parcours
 - **Temps en mouvement** : distinguer temps total et temps effectivement en déplacement (vitesse > seuil)
 - **Vitesse moyenne en temps** : alternative à la vitesse moyenne en distance
@@ -50,13 +50,31 @@
 
 ## Interface
 
-- **Persistance de la mise en page** : mémoriser la position du splitter, la source de tuiles active et le dernier niveau de zoom entre les sessions (`~/.config/gps_viewer.ini`)
+- ~~**Persistance de la mise en page**~~ ✅ Implémenté — option dans Paramétrage → Préférences… ; mémorise la taille de fenêtre et la position des splitters dans `~/.config/gps_viewer/layout.json`
+- ~~**Affichage EXIF dans le visionneur photo**~~ ✅ Implémenté — date de prise, modèle d'appareil, focale affichés dans la boîte de dialogue de visionneuse
+- ~~**Rotation de photo**~~ ✅ Implémenté — boutons ↶ ↷ dans le visionneur pour corriger l'orientation sans quitter l'application
 - **Mode sombre** : thème sombre pour les graphiques, le panneau et la barre d'outils
 - **Raccourcis clavier supplémentaires** : `+` / `-` pour zoomer, flèches pour pan
 - **Plein écran** : touche F11 pour passer la carte en plein écran
 - **Recherche de lieu (Nominatim)** : dans le dialog "Aller aux coordonnées", ajouter un champ de recherche par nom de lieu via l'API Nominatim d'OSM
-- **Affichage EXIF dans le visionneur photo** : date de prise, modèle d'appareil, focale
-- **Rotation de photo** : boutons ↶ ↷ dans le visionneur pour corriger l'orientation sans quitter l'application
+
+## Barre de lecture / Suivi
+
+- ~~**Barre de lecture « Suivre »**~~ ✅ Implémenté — ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, pan automatique, synchronisation graphiques
+- ~~**Annotation curseur distance + temps**~~ ✅ Implémenté — boîte sombre : ↑ parcouru, ↓ restant, ⏱ temps écoulé, 🕐 heure GPS ; visible sur la carte et les deux graphiques
+- **Curseur cliquable** : cliquer sur la trace pour positionner manuellement le curseur de lecture
+- **Barre de progression de lecture** : slider permettant de scrubber la position de lecture par clic ou glisser
+
+## Paramétrage
+
+- ~~**Épaisseur de la trace**~~ ✅ Implémenté — Paramétrage → Préférences…
+- ~~**Opacité du fond de carte**~~ ✅ Implémenté — Paramétrage → Préférences…
+- ~~**Taille des marqueurs photo**~~ ✅ Implémenté — Paramétrage → Préférences…
+- ~~**Taille du curseur rouge**~~ ✅ Implémenté — Paramétrage → Préférences…
+- ~~**Marge de déclenchement du pan automatique**~~ ✅ Implémenté — Paramétrage → Préférences…
+- **Seuil de dénivelé D+/D−** : rendre configurable le seuil de 3 m utilisé pour filtrer le bruit GPS
+- **Fenêtre de lissage vitesse** : paramétrer la taille de la fenêtre de lissage (actuellement 5 points)
+- **Couleurs de traces** : permettre de choisir la couleur de chaque trace manuellement
 
 ## Enregistreur Arduino
 
