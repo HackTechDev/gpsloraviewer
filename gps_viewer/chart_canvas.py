@@ -20,6 +20,12 @@ def _fmt_dist(d: float) -> str:
     return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
 
 
+def _fmt_elapsed(s: float) -> str:
+    m = int(s // 60)
+    h = m // 60
+    return f'{h}h {m % 60:02d}min' if h else f'{m} min'
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  Canvas Graphique  (altitude ou vitesse)
 # ══════════════════════════════════════════════════════════════════════
@@ -36,6 +42,8 @@ class ChartCanvas(FigureCanvas):
         self._vline             = None
         self._dist_arr          = None
         self._total_dist        = None
+        self._elapsed_arr       = None   # secondes écoulées depuis départ
+        self._time_strs         = None   # heure GPS par point (chaîne "HH:MM")
         self._cursor_annot      = None
         self._show_cursor_info  = True
         self._draw_empty()
@@ -62,9 +70,12 @@ class ChartCanvas(FigureCanvas):
         self.fig.tight_layout(pad=0.8)
         self.draw()
 
-    def load(self, distances: list, data: list, ylabel: str, info: str = ''):
+    def load(self, distances: list, data: list, ylabel: str, info: str = '',
+             elapsed: list | None = None, time_strs: list | None = None):
         self._dist_arr     = np.array(distances)
         self._total_dist   = float(distances[-1]) if distances else None
+        self._elapsed_arr  = elapsed
+        self._time_strs    = time_strs
         self._cursor_annot = None  # ax.cla() invalide l'ancien artist
         self.ax.cla()
         self._style_ax()
@@ -105,6 +116,8 @@ class ChartCanvas(FigureCanvas):
         self._dist_arr     = None
         self._vline        = None
         self._total_dist   = None
+        self._elapsed_arr  = None
+        self._time_strs    = None
         self._cursor_annot = None
         self.ax.cla()
         self._style_ax()
@@ -142,6 +155,8 @@ class ChartCanvas(FigureCanvas):
         self._dist_arr     = None
         self._vline        = None
         self._total_dist   = None
+        self._elapsed_arr  = None
+        self._time_strs    = None
         self._cursor_annot = None
         self._draw_empty()
 
@@ -154,7 +169,16 @@ class ChartCanvas(FigureCanvas):
             self._vline.set_visible(True)
             if self._total_dist is not None:
                 remaining = self._total_dist - x
-                txt = f'↑ {_fmt_dist(x)}   ↓ {_fmt_dist(remaining)}'
+                parts = [f'↑ {_fmt_dist(x)}   ↓ {_fmt_dist(remaining)}']
+                if self._elapsed_arr is not None and index < len(self._elapsed_arr):
+                    el = self._elapsed_arr[index]
+                    if el is not None:
+                        parts.append(f'⏱ {_fmt_elapsed(el)}')
+                if self._time_strs is not None and index < len(self._time_strs):
+                    ts = self._time_strs[index]
+                    if ts:
+                        parts.append(f'🕐 {ts}')
+                txt = '\n'.join(parts)
                 ha  = 'left' if index < len(self._dist_arr) * 0.6 else 'right'
                 if self._cursor_annot is None:
                     self._cursor_annot = self.ax.text(

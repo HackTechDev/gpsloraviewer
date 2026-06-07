@@ -49,6 +49,16 @@ _TRACKS_IMG_DIR = _TRACKS_DIR / 'images'
 _TRACKS_JSON    = _TRACKS_DIR / 'track.json'
 
 
+def _extract_time_strs(gps) -> list:
+    """Retourne une liste de chaînes 'HH:MM' (une par point GPS)."""
+    result = []
+    for p in gps.points:
+        t = p.get('time', '')
+        parts = t.replace(' UTC', '').split(':')
+        result.append(f'{parts[0]}:{parts[1]}' if len(parts) >= 2 else '')
+    return result
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  Fenêtre principale
 # ══════════════════════════════════════════════════════════════════════
@@ -447,8 +457,11 @@ class MainWindow(QMainWindow):
         # Graphiques et stats sur la dernière trace ajoutée
         _alt_info = (f'D+ {gps.elev_gain:.0f} m  •  D− {gps.elev_loss:.0f} m'
                      if gps.elev_gain is not None else '')
-        self._chart_alt.load(gps.distances, gps.alts,   'Altitude (m)', info=_alt_info)
-        self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)')
+        _time_strs = _extract_time_strs(gps)
+        self._chart_alt.load(gps.distances, gps.alts,   'Altitude (m)', info=_alt_info,
+                             elapsed=gps.elapsed_times, time_strs=_time_strs)
+        self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)',
+                             elapsed=gps.elapsed_times, time_strs=_time_strs)
         self._stats.refresh(gps)
 
         # Met à jour le sélecteur de trace
@@ -520,8 +533,11 @@ class MainWindow(QMainWindow):
         self._map.set_track_filter(self._gps)
         _alt_info = (f'D+ {self._gps.elev_gain:.0f} m  •  D− {self._gps.elev_loss:.0f} m'
                      if self._gps.elev_gain is not None else '')
-        self._chart_alt.load(self._gps.distances, self._gps.alts, 'Altitude (m)', info=_alt_info)
-        self._chart_spd.load(self._gps.distances, self._gps.speeds,  'Vitesse (km/h)')
+        _time_strs = _extract_time_strs(self._gps)
+        self._chart_alt.load(self._gps.distances, self._gps.alts, 'Altitude (m)', info=_alt_info,
+                             elapsed=self._gps.elapsed_times, time_strs=_time_strs)
+        self._chart_spd.load(self._gps.distances, self._gps.speeds, 'Vitesse (km/h)',
+                             elapsed=self._gps.elapsed_times, time_strs=_time_strs)
         self._stats.refresh(self._gps)
         _elev = (f'  •  D+ {self._gps.elev_gain:.0f} m  D− {self._gps.elev_loss:.0f} m'
                  if self._gps.elev_gain is not None else '')

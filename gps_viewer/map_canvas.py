@@ -26,7 +26,7 @@ from PyQt5.QtWidgets import (QSizePolicy, QApplication,
                               QWidget, QHBoxLayout, QPushButton,
                               QLabel, QComboBox)
 
-from gps_nmea import GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R
+from gps_nmea import GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R, parse_time_s
 
 # ── Cache persistant de tuiles ────────────────────────────────────────
 # Par défaut contextily stocke les tuiles dans un dossier temporaire
@@ -40,6 +40,13 @@ cx.set_cache_dir(str(_TILE_CACHE_DIR))
 def _fmt_dist(d: float) -> str:
     """Formate une distance : km si ≥ 1 000 m, sinon mètres."""
     return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
+
+
+def _fmt_elapsed(s: float) -> str:
+    """Formate un temps écoulé en secondes → 'Xh YYmin' ou 'Ymin'."""
+    m = int(s // 60)
+    h = m // 60
+    return f'{h}h {m % 60:02d}min' if h else f'{m} min'
 
 
 def _cache_size_mb() -> float:
@@ -1320,9 +1327,20 @@ class MapCanvas(FigureCanvas):
             if self._cursor_annot is not None:
                 dist      = self._gps.distances[index]
                 remaining = self._gps.total_dist - dist
+                # Temps écoulé et heure GPS
+                lines = [f'↑ {_fmt_dist(dist)}', f'↓ {_fmt_dist(remaining)}']
+                el = self._gps.elapsed_times[index]
+                if el is not None:
+                    lines.append(f'⏱ {_fmt_elapsed(el)}')
+                pt = self._gps.points[index]
+                t_raw = pt.get('time', '')
+                if t_raw:
+                    # "HH:MM:SS UTC" → "HH:MM"
+                    parts = t_raw.replace(' UTC', '').split(':')
+                    if len(parts) >= 2:
+                        lines.append(f'🕐 {parts[0]}:{parts[1]}')
                 self._cursor_annot.xy = (x, y)
-                self._cursor_annot.set_text(
-                    f'↑ {_fmt_dist(dist)}\n↓ {_fmt_dist(remaining)}')
+                self._cursor_annot.set_text('\n'.join(lines))
                 self._cursor_annot.set_visible(self._show_cursor_info)
         else:
             self._cursor_dot.set_visible(False)

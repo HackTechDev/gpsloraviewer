@@ -170,13 +170,25 @@ class GPSData:
         self.spd_max = max(valid_s) if valid_s else 0.0
         self.spd_avg = sum(valid_s)/len(valid_s) if valid_s else 0.0
 
-        # Durée
+        # Durée + temps écoulé par point
         t0 = parse_time_s(points[0]['time'])
         tN = parse_time_s(points[-1]['time'])
         self.duration_s = None
         if t0 is not None and tN is not None:
             d = tN - t0
             self.duration_s = d + 86400 if d < 0 else d
+        if t0 is not None:
+            elapsed = []
+            for p in points:
+                t = parse_time_s(p['time'])
+                if t is None:
+                    elapsed.append(None)
+                else:
+                    e = t - t0
+                    elapsed.append(e + 86400 if e < 0 else e)
+            self.elapsed_times: list = elapsed
+        else:
+            self.elapsed_times = [None] * n
 
         # Coordonnées Web Mercator (numpy)
         wm = [to_webmerc(p['lat'], p['lon']) for p in points]
