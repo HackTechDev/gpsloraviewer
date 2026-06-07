@@ -350,6 +350,7 @@ Saisissez une latitude et une longitude décimales (ou collez `48.8566, 2.3522`)
 
 - La fenêtre affiche toutes les traces GPS chargées avec les axes Est / Nord (en mètres) et l'axe Altitude.
 - Les marqueurs **●** (départ) et **■** (arrivée) sont visibles pour chaque trace.
+- Chaque trace est aussi **projetée sur le plan du sol** (vue du dessus) avec la même couleur, permettant de lire le trajet à plat sans changer l'angle de caméra.
 - Une **barre de statistiques** en bas indique pour chaque trace : distance, D+, D−, altitude min–max.
 
 ### Modes de coloration
@@ -371,6 +372,35 @@ Le bouton **🗺 Fond OSM** ajoute un plan OpenStreetMap en base de la scène 3D
 ### Courbes de niveau SRTM
 
 Le bouton **🏔 Courbes** calcule et affiche les courbes de niveau issues des données d'altitude SRTM, espacées de 50 m, avec étiquettes d'altitude sur la carte.
+
+### Animation du parcours
+
+Une **barre de lecture** (fond sombre) sous le canvas 3D permet de rejouer le parcours :
+
+| Contrôle | Description |
+|----------|-------------|
+| ⏮ | Retour au point de départ |
+| ▶ Animer | Démarrer l'animation (devient ⏸ Pause) |
+| ⏸ Pause | Suspendre l'animation |
+| × 1 / × 2 / × 5 / × 10 | Vitesse de lecture (points par tick de 100 ms) |
+| **Scrubber** | Glissière pleine largeur — cliquer ou glisser pour se positionner |
+
+Pendant l'animation, trois éléments se déplacent en synchronisation pour chaque trace :
+
+| Élément | Description |
+|---------|-------------|
+| **Point 3D** | Cercle blanc avec bordure colorée, positionné à l'altitude réelle |
+| **Shadow** | Disque de la couleur de la trace, projeté sur le plan du sol |
+| **Ligne verticale** | Trait pointillé reliant le point 3D à son ombre — longueur = altitude relative |
+
+Le compteur affiche en permanence :
+
+```
+point 42 / 1 247  │  ↑ 1,3 km  ↓ 5,8 km  │  ⏱ 23 min  │  🕐 09:42
+```
+
+> Les indicateurs ↑ ↓ ⏱ 🕐 sont basés sur la première trace chargée.
+> Glisser le scrubber pendant la lecture suspend le timer et le reprend au relâchement.
 
 ### Navigation 3D
 

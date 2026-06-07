@@ -22,9 +22,9 @@
 ## Vue 3D
 
 - ~~**Courbes de niveau SRTM**~~ ✅ Implémenté — bouton `🏔 Courbes`, données SRTM, courbes toutes les 50 m avec étiquettes
+- ~~**Animation**~~ ✅ Implémenté — barre de lecture sous le canvas 3D : ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, scrubber ; point animé 3D + shadow au sol + ligne verticale reliant les deux ; indicateurs ↑↓⏱🕐 en temps réel
 - **Exagération verticale configurable** : slider pour multiplier l'axe Z et rendre le relief plus lisible sur les terrains plats
 - **Extrusion du profil altimétrique** : afficher les murs verticaux sous la trace pour mieux visualiser le dénivelé
-- **Animation** : rejouer le parcours sous forme d'un point se déplaçant sur la trace en 3D avec boutons play/pause/vitesse
 - **Curseur 3D synchronisé** : le survol d'un graphique déplace également un repère dans la vue 3D
 - **Export image 3D** : sauvegarder la vue 3D courante en PNG haute résolution
 - **Simplification des traces 3D** : appliquer Douglas-Peucker sur les traces > 1 000 points pour éviter les ralentissements

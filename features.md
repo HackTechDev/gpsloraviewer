@@ -212,6 +212,7 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 
 - Axes **Est / Nord** en mètres (coordonnées Web Mercator centrées sur le centroïde), axe **Altitude** en mètres
 - Marqueurs départ (●) et arrivée (■) pour chaque trace
+- **Projection horizontale** : chaque trace est également projetée sur le plan du sol (z_floor) avec la même couleur, alpha 0,65 — donne une lecture « vue du dessus » sans changer l'angle de caméra
 - **Barre de statistiques** en bas de la fenêtre 3D : nom, distance, D+, D−, altitude min–max pour chaque trace
 - Trois **modes de coloration** :
 
@@ -230,6 +231,26 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 - **Zoom à la molette** dans la vue 3D
 - Bouton `⌂ Réinitialiser la vue` pour revenir à l'angle par défaut (élev 25°, azim −60°)
 - La fenêtre se met à jour automatiquement lors de l'ajout d'une nouvelle trace
+
+### Animation du parcours 3D
+
+Une **barre de lecture** (fond sombre) est affichée sous le canvas 3D :
+
+| Contrôle | Description |
+|----------|-------------|
+| ⏮ | Retour au point de départ |
+| ▶ Animer / ⏸ Pause | Démarrer ou suspendre l'animation |
+| Compteur | `point N / total  │  ↑ dist  │  ↓ dist  │  ⏱ temps  │  🕐 heure` |
+| × 1 / × 2 / × 5 / × 10 | Nombre de points avancés par tick de 100 ms |
+| **Scrubber** | Glissière pleine largeur pour se positionner librement |
+
+Pour chaque trace, l'animation affiche trois éléments solidaires :
+
+- **Point 3D** (cercle blanc, bordure couleur de trace) se déplaçant sur la trace en altitude
+- **Shadow au sol** (disque couleur de trace, semi-transparent) projeté sur le plan horizontal
+- **Ligne verticale pointillée** reliant le point 3D à son ombre au sol, longueur = altitude relative
+
+Le compteur affiche en permanence la distance parcourue, la distance restante, le temps écoulé depuis le départ et l'heure GPS (basés sur la première trace chargée).
 
 ## Menu Paramétrage
 
