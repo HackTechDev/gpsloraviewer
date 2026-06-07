@@ -33,10 +33,11 @@ class ChartCanvas(FigureCanvas):
         self._title = title
         self._color = color
         self._on_hover = on_hover
-        self._vline        = None
-        self._dist_arr     = None
-        self._total_dist   = None
-        self._cursor_annot = None
+        self._vline             = None
+        self._dist_arr          = None
+        self._total_dist        = None
+        self._cursor_annot      = None
+        self._show_cursor_info  = True
         self._draw_empty()
         self.mpl_connect('motion_notify_event', self._mouse_move)
         self.mpl_connect('axes_leave_event',    lambda _: on_hover(None))
@@ -164,16 +165,26 @@ class ChartCanvas(FigureCanvas):
                                   facecolor='#fff8e8', edgecolor='#e0c070',
                                   alpha=0.92),
                         zorder=6)
+                    self._cursor_annot.set_visible(self._show_cursor_info)
                 else:
                     self._cursor_annot.set_x(x)
                     self._cursor_annot.set_text(txt)
                     self._cursor_annot.set_ha(ha)
-                    self._cursor_annot.set_visible(True)
+                    self._cursor_annot.set_visible(self._show_cursor_info)
         else:
             self._vline.set_visible(False)
             if self._cursor_annot is not None:
                 self._cursor_annot.set_visible(False)
         self.draw_idle()
+
+    def set_show_cursor_info(self, visible: bool):
+        """Affiche ou masque l'annotation distance parcouru/restant."""
+        self._show_cursor_info = visible
+        if self._cursor_annot is not None:
+            self._cursor_annot.set_visible(
+                visible and self._vline is not None
+                and self._vline.get_visible())
+            self.draw_idle()
 
     def _mouse_move(self, event):
         if event.inaxes != self.ax or self._dist_arr is None:

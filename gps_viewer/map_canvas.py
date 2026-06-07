@@ -244,8 +244,9 @@ class MapCanvas(FigureCanvas):
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.ax = self.fig.add_axes([0, 0, 1, 1])
         self.ax.set_axis_off()
-        self._cursor_dot   = None
-        self._cursor_annot = None   # annotation distance parcouru/restant
+        self._cursor_dot        = None
+        self._cursor_annot      = None   # annotation distance parcouru/restant
+        self._show_cursor_info  = True   # activé via Paramétrage
         self._gps: GPSData | None = None
         self._gps_list: list      = []
         self._default_lim = None   # (xlim, ylim) pour reset
@@ -1248,6 +1249,15 @@ class MapCanvas(FigureCanvas):
 
     # ── Curseur synchronisé avec les graphiques ──────────────────────
 
+    def set_show_cursor_info(self, visible: bool):
+        """Affiche ou masque l'annotation distance parcouru/restant."""
+        self._show_cursor_info = visible
+        if self._cursor_annot is not None:
+            self._cursor_annot.set_visible(
+                visible and self._cursor_dot is not None
+                and self._cursor_dot.get_visible())
+            self.draw_idle()
+
     def set_cursor_track(self, gps: GPSData):
         """Définit la trace dont les coordonnées sont utilisées pour le curseur."""
         self._gps = gps
@@ -1266,7 +1276,7 @@ class MapCanvas(FigureCanvas):
                 self._cursor_annot.xy = (x, y)
                 self._cursor_annot.set_text(
                     f'↑ {_fmt_dist(dist)}\n↓ {_fmt_dist(remaining)}')
-                self._cursor_annot.set_visible(True)
+                self._cursor_annot.set_visible(self._show_cursor_info)
         else:
             self._cursor_dot.set_visible(False)
             if self._cursor_annot is not None:

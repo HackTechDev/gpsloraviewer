@@ -338,6 +338,17 @@ class MainWindow(QMainWindow):
         a_cache_clear.triggered.connect(self._cache_clear)
         om.addAction(a_cache_clear)
 
+        pm = mb.addMenu('Paramétrage')
+
+        self._act_cursor_info = QAction('Afficher distance parcourue / restante', self)
+        self._act_cursor_info.setCheckable(True)
+        self._act_cursor_info.setChecked(True)
+        self._act_cursor_info.setToolTip(
+            'Affiche la boîte distance parcouru / restant\n'
+            'à côté du curseur sur la carte et les graphiques')
+        self._act_cursor_info.toggled.connect(self._on_toggle_cursor_info)
+        pm.addAction(self._act_cursor_info)
+
         hm = mb.addMenu('Aide')
         a3 = QAction('À propos', self)
         a3.triggered.connect(self._about)
@@ -544,6 +555,11 @@ class MainWindow(QMainWindow):
         labels = {'flat': 'Trace', 'altitude': 'Trace ▲alt', 'speed': 'Trace ⚡vit'}
         self._btn_color.setText(f'🎨  {labels.get(mode, "Trace")}')
         self._map.set_track_mode(mode)
+
+    def _on_toggle_cursor_info(self, visible: bool):
+        self._map.set_show_cursor_info(visible)
+        self._chart_alt.set_show_cursor_info(visible)
+        self._chart_spd.set_show_cursor_info(visible)
 
     # ── Fichiers récents ─────────────────────────────────────────────
 
