@@ -54,6 +54,28 @@ def _smooth(data: list, window: int = 5) -> list:
     return out
 
 
+def parse_gprmc(line: str):
+    """Parse une trame $GPRMC ou $GNRMC. Retourne None si fix invalide."""
+    parts = line.strip().split(',')
+    if len(parts) < 7:
+        return None
+    try:
+        raw_t  = parts[1]
+        status = parts[2]
+        if status != 'A':
+            return None
+        if not parts[3] or not parts[5]:
+            return None
+        lat = nmea_to_decimal(parts[3], parts[4])
+        lon = nmea_to_decimal(parts[5], parts[6])
+    except (ValueError, IndexError):
+        return None
+    fmt = (f"{raw_t[0:2]}:{raw_t[2:4]}:{raw_t[4:]} UTC"
+           if len(raw_t) >= 6 else raw_t)
+    return {'time': fmt, 'lat': lat, 'lon': lon,
+            'alt': None, 'sats': 0, 'hdop': None}
+
+
 def parse_gpgga(line: str):
     parts = line.strip().split(',')
     if len(parts) < 10:
@@ -83,8 +105,12 @@ def load_points(filepath: str) -> list:
     pts = []
     with open(filepath, 'r', errors='replace') as f:
         for line in f:
-            if line.startswith('$GPGGA'):
+            if line.startswith(('$GPGGA', '$GNGGA')):
                 pt = parse_gpgga(line)
+                if pt:
+                    pts.append(pt)
+            elif line.startswith(('$GPRMC', '$GNRMC')):
+                pt = parse_gprmc(line)
                 if pt:
                     pts.append(pt)
     return pts

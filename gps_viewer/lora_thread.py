@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from gps_nmea import parse_gpgga
+from gps_nmea import parse_gpgga, parse_gprmc
 
 BAUD_RATE_DEFAULT = 115_200
 
@@ -71,9 +71,13 @@ class LoraThread(QThread):
                         f.write(line + '\r\n')
                         f.flush()
 
-                    # Seules les GPGGA valides déclenchent un point sur la carte
-                    if line.startswith('$GPGGA'):
+                    # Trames de position : GGA (avec alt/sats) ou RMC
+                    if line.startswith(('$GPGGA', '$GNGGA')):
                         pt = parse_gpgga(line)
+                        if pt:
+                            self.point_received.emit(pt)
+                    elif line.startswith(('$GPRMC', '$GNRMC')):
+                        pt = parse_gprmc(line)
                         if pt:
                             self.point_received.emit(pt)
 
