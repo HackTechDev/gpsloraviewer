@@ -348,6 +348,13 @@ class MapCanvas(FigureCanvas):
         self._play_bar    = self._build_play_bar()
         self._play_bar.setVisible(False)
 
+        # ── Mode réception live (LoRa) ───────────────────────────────
+        self._live_line:  object = None   # Line2D de la trace en cours
+        self._live_dot:   object = None   # Point GPS courant
+        self._live_xs:    list   = []
+        self._live_ys:    list   = []
+        self._live_color: str    = '#e67e22'
+
         # ── Événements souris / clavier ──────────────────────────────
         self.mpl_connect('scroll_event',         self._on_scroll)
         self.mpl_connect('button_press_event',   self._on_press)
@@ -1134,6 +1141,10 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot    = None
         self._cursor_annot  = None
         self._loading_text  = None
+        self._live_line     = None
+        self._live_dot      = None
+        self._live_xs       = []
+        self._live_ys       = []
         self.ax.cla()
         self.ax.set_axis_off()
         self._welcome()
@@ -2004,3 +2015,111 @@ class MapCanvas(FigureCanvas):
         if m < 1000:
             return f'{m:.0f} m'
         return f'{m / 1000:.3f} km'
+
+    # ══════════════════════════════════════════════════════════════════
+    #  Réception GPS en temps réel (LoRa Live)
+    # ══════════════════════════════════════════════════════════════════
+
+    def start_live_track(self, color: str = '#e67e22'):
+        """Prépare l'overlay live. Les artistes sont créés au premier point si la carte est vide."""
+        self._stop_live_artists()
+        self._live_color = color
+        self._live_xs    = []
+        self._live_ys    = []
+
+        if self._default_lim is not None:
+            # Carte déjà visible : ajoute la ligne et le point immédiatement
+            self._live_line, = self.ax.plot(
+                [], [], color=color, linewidth=2.5, zorder=5,
+                solid_capstyle='round', solid_joinstyle='round',
+                label='📡 LoRa Live')
+            self._live_dot, = self.ax.plot(
+                [], [], 'o', color=color, markersize=13, zorder=10,
+                markeredgecolor='white', markeredgewidth=2)
+            self.ax.legend(loc='upper left', fontsize=9,
+                           framealpha=0.85, fancybox=True)
+            self.draw_idle()
+        else:
+            # Carte vide : les artistes seront créés dans _init_live_map
+            self._live_line = None
+            self._live_dot  = None
+
+    def append_live_point(self, x_m: float, y_m: float):
+        """Ajoute un point GPS reçu en temps réel et met à jour la carte.
+
+        Appelé depuis le thread principal via signal Qt.
+        """
+        self._live_xs.append(x_m)
+        self._live_ys.append(y_m)
+
+        # Initialise la vue au premier point si la carte est encore vide
+        if self._live_line is None:
+            self._init_live_map(x_m, y_m)
+
+        self._live_line.set_data(self._live_xs, self._live_ys)
+        self._live_dot.set_data([x_m], [y_m])
+
+        # Auto-pan : recentre si le point sort de la zone centrale (70 % de la vue)
+        xl, yl   = self.ax.get_xlim(), self.ax.get_ylim()
+        margin_x = (xl[1] - xl[0]) * 0.15
+        margin_y = (yl[1] - yl[0]) * 0.15
+        if (x_m < xl[0] + margin_x or x_m > xl[1] - margin_x or
+                y_m < yl[0] + margin_y or y_m > yl[1] - margin_y):
+            hw = (xl[1] - xl[0]) / 2
+            hh = (yl[1] - yl[0]) / 2
+            self.ax.set_xlim(x_m - hw, x_m + hw)
+            self.ax.set_ylim(y_m - hh, y_m + hh)
+            self._tile_timer.start()
+
+        self.draw_idle()
+
+    def _init_live_map(self, x_m: float, y_m: float):
+        """Configure la vue centrée sur le premier point live (carte était vide)."""
+        margin = 500  # 500 m de rayon initial
+        xlim = (x_m - margin, x_m + margin)
+        ylim = (y_m - margin, y_m + margin)
+        self._default_lim = (xlim, ylim)
+
+        self.ax.cla()
+        self.ax.set_axis_off()
+        self.ax.set_aspect('equal', adjustable='datalim')
+        self.ax.set_xlim(xlim)
+        self.ax.set_ylim(ylim)
+        self._loading_text = None
+        self._cursor_dot   = None
+        self._cursor_annot = None
+
+        self._live_line, = self.ax.plot(
+            [], [], color=self._live_color, linewidth=2.5, zorder=5,
+            solid_capstyle='round', solid_joinstyle='round',
+            label='📡 LoRa Live')
+        self._live_dot, = self.ax.plot(
+            [], [], 'o', color=self._live_color, markersize=13, zorder=10,
+            markeredgecolor='white', markeredgewidth=2)
+        self.ax.legend(loc='upper left', fontsize=9,
+                       framealpha=0.85, fancybox=True)
+
+        # Redessine les éventuelles annotations déjà chargées
+        self._redraw_photos()
+        self._redraw_notes()
+
+        self.fig.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        self._request_tiles()
+
+    def stop_live_track(self):
+        """Retire les artistes live de la carte (les traces chargées restent visibles)."""
+        self._stop_live_artists()
+        self._live_xs = []
+        self._live_ys = []
+        self.draw_idle()
+
+    def _stop_live_artists(self):
+        """Supprime proprement les artistes matplotlib de la trace live."""
+        for attr in ('_live_line', '_live_dot'):
+            art = getattr(self, attr, None)
+            if art is not None:
+                try:
+                    art.remove()
+                except Exception:
+                    pass
+                setattr(self, attr, None)

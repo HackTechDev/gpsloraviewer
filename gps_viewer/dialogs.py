@@ -1,7 +1,9 @@
 """
-dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog, SettingsDialog
+dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog,
+             SettingsDialog, NoteDialog, LoraConnectDialog
 """
 
+import glob
 from pathlib import Path
 from PIL import Image as PilImage
 
@@ -11,7 +13,7 @@ from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit,
     QGridLayout, QScrollArea, QPushButton, QTextEdit, QFormLayout,
     QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QSizePolicy,
-    QGroupBox, QCheckBox, QSlider,
+    QGroupBox, QCheckBox, QSlider, QComboBox,
 )
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QPixmap, QImage
@@ -572,3 +574,91 @@ class NoteDialog(QDialog):
     def _on_delete(self):
         self._deleted = True
         self.accept()
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  Dialogue de connexion au récepteur LoRa
+# ══════════════════════════════════════════════════════════════════════
+
+class LoraConnectDialog(QDialog):
+    """Sélection du port série et du baud rate pour la réception GPS LoRa."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Réception GPS LoRa — Connexion')
+        self.setMinimumWidth(420)
+        self._build()
+
+    def _build(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        # ── Description ──────────────────────────────────────────────
+        info = QLabel(
+            'Connectez l\'Arduino récepteur LoRa, sélectionnez le port série\n'
+            'et cliquez sur Connecter. La trace GPS s\'affichera en temps réel.')
+        info.setWordWrap(True)
+        info.setStyleSheet('color:#555; font-size:11px; padding:4px 0;')
+        layout.addWidget(info)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # ── Port série ───────────────────────────────────────────────
+        candidates = sorted(
+            glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*'))
+
+        self._port_combo = QComboBox()
+        self._port_combo.setEditable(True)
+        for p in candidates:
+            self._port_combo.addItem(p)
+        if candidates:
+            self._port_combo.setCurrentIndex(0)
+        else:
+            self._port_combo.lineEdit().setPlaceholderText(
+                'Aucun port détecté — saisir manuellement (ex: /dev/ttyUSB0)')
+        self._port_combo.setToolTip(
+            'Port série de l\'Arduino récepteur LoRa.\n'
+            'Détection automatique de /dev/ttyUSB* et /dev/ttyACM*.')
+        form.addRow('Port série :', self._port_combo)
+
+        # ── Baud rate ────────────────────────────────────────────────
+        self._baud_combo = QComboBox()
+        for b in ('9600', '19200', '38400', '57600', '115200'):
+            self._baud_combo.addItem(b)
+        self._baud_combo.setCurrentText('115200')
+        self._baud_combo.setToolTip('Vitesse du port série (doit correspondre au firmware Arduino).')
+        form.addRow('Vitesse (baud) :', self._baud_combo)
+
+        layout.addLayout(form)
+
+        if len(candidates) > 1:
+            warn = QLabel(f'⚠  {len(candidates)} ports détectés — vérifiez le bon port.')
+            warn.setStyleSheet('color:#c07d10; font-size:10px;')
+            layout.addWidget(warn)
+
+        # ── Boutons ──────────────────────────────────────────────────
+        self._btn_ok = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self._btn_ok.button(QDialogButtonBox.Ok).setText('Connecter')
+        self._btn_ok.button(QDialogButtonBox.Ok).setEnabled(
+            bool(candidates) or False)
+        self._btn_ok.accepted.connect(self.accept)
+        self._btn_ok.rejected.connect(self.reject)
+        layout.addWidget(self._btn_ok)
+
+        # Active le bouton Connecter dès qu'un port est saisi manuellement
+        if not candidates:
+            self._port_combo.editTextChanged.connect(self._on_port_text_changed)
+
+    def _on_port_text_changed(self, text: str):
+        self._btn_ok.button(QDialogButtonBox.Ok).setEnabled(bool(text.strip()))
+
+    def port(self) -> str:
+        return self._port_combo.currentText().strip()
+
+    def baud(self) -> int:
+        try:
+            return int(self._baud_combo.currentText())
+        except ValueError:
+            return 115_200

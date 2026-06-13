@@ -25,6 +25,7 @@ from PyQt5.QtWidgets import (
     QFrame, QToolBar, QSizePolicy,
     QToolButton, QMenu, QProgressBar,
     QDialog, QDialogButtonBox, QSplashScreen, QComboBox,
+    QPushButton, QPlainTextEdit,
 )
 from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen
@@ -33,7 +34,9 @@ from gps_nmea import GPSData, load_points, to_webmerc, _webmerc_to_latlon
 from map_canvas import MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR, _cache_size_mb
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
 from stats_panel import StatsPanel
-from dialogs import CoordDialog, PhotoViewDialog, ParcoursPropDialog, SettingsDialog, NoteDialog
+from dialogs import (CoordDialog, PhotoViewDialog, ParcoursPropDialog,
+                     SettingsDialog, NoteDialog, LoraConnectDialog)
+from lora_thread import LoraThread, default_lora_output_path
 from view_3d import View3DWindow
 
 # ── Constantes application ────────────────────────────────────────────
@@ -83,10 +86,17 @@ class MainWindow(QMainWindow):
         self._pref_autopan_margin:  int   = 0
         self._pref_remember_layout: bool  = False
         self._current_track_path: Path = self._resolve_startup_track()
+        # ── État réception LoRa live ─────────────────────────────────
+        self._lora_thread:      'LoraThread | None' = None
+        self._lora_raw_points:  list                = []
+        self._lora_output_path: 'Path | None'       = None
         self._load_settings()
         self._build_ui()
         self._apply_settings_to_map()
         self._build_menus()
+        # Timer de mise à jour des graphiques pendant la réception live (3 s)
+        self._lora_chart_timer = QTimer(self, interval=3000, singleShot=False)
+        self._lora_chart_timer.timeout.connect(self._update_lora_charts)
         self.setAcceptDrops(True)
         self._load_track_json()
         if self._pref_remember_layout:
@@ -201,6 +211,23 @@ class MainWindow(QMainWindow):
         act_3d.triggered.connect(self._open_3d_view)
         tb.addAction(act_3d)
 
+        # ── Réception LoRa live ──────────────────────────────────────
+        tb.addSeparator()
+
+        self._act_lora = QAction('📡  LoRa Live', self)
+        self._act_lora.setCheckable(True)
+        self._act_lora.setToolTip(
+            'Démarrer / arrêter la réception GPS en temps réel\n'
+            'via le récepteur LoRa branché en USB')
+        self._act_lora.toggled.connect(self._on_lora_toggled)
+        tb.addAction(self._act_lora)
+
+        self._lbl_lora_status = QLabel()
+        self._lbl_lora_status.setStyleSheet(
+            'color:#e67e22; padding:0 6px; font-size:11px; font-weight:bold;')
+        self._lbl_lora_status.setVisible(False)
+        tb.addWidget(self._lbl_lora_status)
+
         # ── Sélecteur de trace active pour les graphiques ────────────
         # Le séparateur et le widget sont gérés via leur QWidgetAction
         # (setVisible sur le QWidget lui-même est ignoré dans un QToolBar)
@@ -241,13 +268,18 @@ class MainWindow(QMainWindow):
         self._charts_split.setSizes([680, 680])
         self._charts_split.setMinimumHeight(160)
 
-        # Splitter principal (vertical : carte | graphiques)
+        # Splitter principal (vertical : carte | graphiques | log LoRa)
         self._vsplit = QSplitter(Qt.Vertical)
         self._vsplit.addWidget(self._map)
         self._vsplit.addWidget(self._charts_split)
         self._vsplit.setHandleWidth(4)
         self._vsplit.setStyleSheet(
             'QSplitter::handle { background: #ddd; }')
+
+        # ── Panneau de log LoRa (masqué par défaut) ──────────────────
+        self._lora_log_panel = self._build_lora_log_panel()
+        self._vsplit.addWidget(self._lora_log_panel)
+        self._lora_log_panel.setVisible(False)
 
         # Layout central : vsplit + stats
         center = QWidget()
@@ -295,6 +327,63 @@ class MainWindow(QMainWindow):
         self._map.note_clicked.connect(self._on_note_clicked)
         self._act_note.toggled.connect(self._on_note_mode_toggled)
         self._map.playback_index_changed.connect(self._on_hover)
+
+    def _build_lora_log_panel(self) -> QWidget:
+        """Construit le panneau de log LoRa (affiché uniquement en mode live)."""
+        panel = QWidget()
+        panel.setMinimumHeight(90)
+        panel.setMaximumHeight(200)
+        panel.setStyleSheet('QWidget { background:#131d2a; border-top:1px solid #2c3e55; }')
+
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(6, 4, 6, 4)
+        layout.setSpacing(3)
+
+        # ── En-tête ──────────────────────────────────────────────────
+        header = QHBoxLayout()
+        header.setSpacing(6)
+
+        dot = QLabel('⬤')
+        dot.setStyleSheet('color:#e67e22; font-size:10px;')
+        header.addWidget(dot)
+
+        lbl = QLabel('Log LoRa Live')
+        lbl.setStyleSheet('color:#9ab; font-size:11px; font-weight:bold;')
+        header.addWidget(lbl)
+
+        self._lora_log_count_lbl = QLabel('— aucun point reçu')
+        self._lora_log_count_lbl.setStyleSheet('color:#5a7a9a; font-size:10px;')
+        header.addWidget(self._lora_log_count_lbl)
+
+        header.addStretch()
+
+        btn_clear = QPushButton('Vider')
+        btn_clear.setFixedSize(52, 20)
+        btn_clear.setStyleSheet(
+            'QPushButton { background:#2c3e55; color:#9ab; border:none;'
+            ' border-radius:3px; font-size:10px; }'
+            'QPushButton:hover { background:#3d5a80; }')
+        btn_clear.clicked.connect(self._lora_log_clear)
+        header.addWidget(btn_clear)
+
+        layout.addLayout(header)
+
+        # ── Zone de texte ─────────────────────────────────────────────
+        self._lora_log = QPlainTextEdit()
+        self._lora_log.setReadOnly(True)
+        self._lora_log.setMaximumBlockCount(500)   # conserve les 500 dernières lignes
+        self._lora_log.setStyleSheet(
+            'QPlainTextEdit {'
+            '  background:#0e1520; color:#7fbfff;'
+            '  font-family: "Courier New", monospace; font-size:11px;'
+            '  border:none; selection-background-color:#1a4a80;'
+            '}')
+        layout.addWidget(self._lora_log)
+
+        return panel
+
+    def _lora_log_clear(self):
+        self._lora_log.clear()
 
     def _build_menus(self):
         mb = self.menuBar()
@@ -707,6 +796,12 @@ class MainWindow(QMainWindow):
             pass
 
     def closeEvent(self, event):
+        # Arrêt propre du thread LoRa avant fermeture (sans demander de charger)
+        if self._lora_thread is not None:
+            self._lora_chart_timer.stop()
+            self._lora_thread.stop()
+            self._lora_thread.wait(2000)
+            self._lora_thread = None
         if self._pref_remember_layout:
             self._save_layout()
         event.accept()
@@ -1276,6 +1371,153 @@ class MainWindow(QMainWindow):
                 self._parcours_titre       = new_titre
                 self._parcours_description = new_desc
                 self._save_track_json()
+
+    # ── Réception GPS LoRa en temps réel ─────────────────────────────
+
+    def _on_lora_toggled(self, checked: bool):
+        if checked:
+            self._start_lora()
+        else:
+            self._stop_lora()
+
+    def _start_lora(self):
+        dlg = LoraConnectDialog(self)
+        if dlg.exec_() != QDialog.Accepted:
+            # L'utilisateur a annulé : on décoche sans déclencher le slot
+            self._act_lora.blockSignals(True)
+            self._act_lora.setChecked(False)
+            self._act_lora.blockSignals(False)
+            return
+
+        port = dlg.port()
+        baud = dlg.baud()
+
+        self._lora_raw_points  = []
+        self._lora_output_path = default_lora_output_path()
+
+        self._lora_thread = LoraThread(port, baud, self._lora_output_path)
+        self._lora_thread.point_received.connect(self._on_lora_point)
+        self._lora_thread.error_occurred.connect(self._on_lora_error)
+        self._lora_thread.start()
+
+        self._map.start_live_track()
+        self._lora_chart_timer.start()
+
+        # ── Panneau de log ─────────────────────────────────────────
+        self._lora_log.clear()
+        self._lora_log_count_lbl.setText('— en attente du premier point…')
+        self._lora_log_panel.setVisible(True)
+
+        # Répartit le splitter : 55 % carte / 30 % graphiques / 15 % log
+        total = sum(self._vsplit.sizes()) or self._vsplit.height()
+        log_h = max(110, int(total * 0.15))
+        rest  = total - log_h
+        self._vsplit.setSizes([int(rest * 0.62), int(rest * 0.38), log_h])
+
+        self._lbl_lora_status.setText('⬤  LoRa Live — 0 pts')
+        self._lbl_lora_status.setVisible(True)
+        self._sb.showMessage(
+            f'📡 Réception LoRa active — Port : {port} @ {baud} baud'
+            f'  •  Fichier : {self._lora_output_path.name}')
+
+    def _stop_lora(self, *, ask_load: bool = True):
+        """Arrête la réception. Si ask_load, propose de charger le fichier sauvegardé."""
+        self._lora_chart_timer.stop()
+
+        if self._lora_thread is not None:
+            self._lora_thread.stop()
+            self._lora_thread.wait(2000)   # attend max 2 s (timeout série = 1 s)
+            self._lora_thread = None
+
+        self._map.stop_live_track()
+
+        # Masque le log et restaure le ratio carte / graphiques
+        self._lora_log_panel.setVisible(False)
+        sizes = self._vsplit.sizes()
+        rest  = sizes[0] + sizes[1]
+        if rest > 0:
+            self._vsplit.setSizes([int(rest * 0.62), int(rest * 0.38), 0])
+
+        self._lbl_lora_status.setVisible(False)
+        self._act_lora.blockSignals(True)
+        self._act_lora.setChecked(False)
+        self._act_lora.blockSignals(False)
+
+        n = len(self._lora_raw_points)
+        if n < 2:
+            self._sb.showMessage('Réception LoRa arrêtée — aucune position GPS valide reçue.')
+            return
+
+        if ask_load and self._lora_output_path and self._lora_output_path.exists():
+            reply = QMessageBox.question(
+                self, 'Réception LoRa terminée',
+                f'<b>{n} positions GPS</b> reçues et enregistrées dans :<br>'
+                f'<code>{self._lora_output_path}</code><br><br>'
+                'Charger la trace sur la carte ?',
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
+            if reply == QMessageBox.Yes:
+                self._load(str(self._lora_output_path))
+        else:
+            self._sb.showMessage(
+                f'Réception LoRa arrêtée — {n} positions enregistrées'
+                + (f' dans {self._lora_output_path.name}'
+                   if self._lora_output_path else ''))
+
+    def _on_lora_point(self, pt: dict):
+        """Reçoit un point GPS valide depuis le thread LoRa (thread principal via signal Qt)."""
+        x_m, y_m = to_webmerc(pt['lat'], pt['lon'])
+        self._lora_raw_points.append(pt)
+        self._map.append_live_point(x_m, y_m)
+
+        n = len(self._lora_raw_points)
+
+        # ── Entrée de log ─────────────────────────────────────────
+        t_raw  = pt.get('time', '')
+        # "HH:MM:SS.ss UTC" → "HH:MM:SS"
+        t_str  = t_raw.replace(' UTC', '').split('.')[0] if t_raw else '—:—:—'
+        alt    = pt.get('alt')
+        sats   = pt.get('sats', '?')
+        hdop   = pt.get('hdop')
+        alt_s  = f'{alt:7.1f} m' if alt is not None else '       —'
+        hdop_s = f'HDOP {hdop:.1f}' if hdop is not None else ''
+        log_line = (
+            f'{t_str}  '
+            f'Lat {pt["lat"]:+10.6f}°  '
+            f'Lon {pt["lon"]:+11.6f}°  '
+            f'Alt {alt_s}  '
+            f'Sats {sats:2}  {hdop_s}'
+        )
+        self._lora_log.appendPlainText(log_line)
+        self._lora_log_count_lbl.setText(f'{n} point{"s" if n > 1 else ""} reçu{"s" if n > 1 else ""}')
+
+        self._lbl_lora_status.setText(f'⬤  LoRa Live — {n} pts')
+        if n % 10 == 0:
+            self._sb.showMessage(
+                f'📡 LoRa Live — {n} positions GPS'
+                + (f'  •  {self._lora_output_path.name}'
+                   if self._lora_output_path else ''))
+
+    def _update_lora_charts(self):
+        """Rafraîchit graphiques et statistiques avec les points live accumulés."""
+        if len(self._lora_raw_points) < 2:
+            return
+        gps = GPSData(self._lora_raw_points,
+                      str(self._lora_output_path or 'LoRa Live'))
+        _time_strs = _extract_time_strs(gps)
+        _alt_info  = (f'D+ {gps.elev_gain:.0f} m  •  D− {gps.elev_loss:.0f} m'
+                      if gps.elev_gain is not None else '')
+        self._chart_alt.load(gps.distances, gps.alts, 'Altitude (m)',
+                             info=_alt_info,
+                             elapsed=gps.elapsed_times, time_strs=_time_strs)
+        self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)',
+                             elapsed=gps.elapsed_times, time_strs=_time_strs)
+        self._stats.refresh(gps)
+
+    def _on_lora_error(self, msg: str):
+        """Erreur fatale du thread LoRa (ex : déconnexion USB)."""
+        self._stop_lora(ask_load=True)
+        QMessageBox.critical(self, 'Erreur de réception LoRa',
+                             f'La connexion série a échoué :\n\n{msg}')
 
     def _about(self):
         QMessageBox.about(self, 'À propos — GPS Viewer',
