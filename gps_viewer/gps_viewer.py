@@ -257,8 +257,8 @@ class MainWindow(QMainWindow):
 
         # Canvases
         self._map       = MapCanvas()
-        self._chart_alt = ChartCanvas('Profil altimétrique', C_ALT, self._on_hover)
-        self._chart_spd = ChartCanvas('Vitesse (km/h)',       C_SPD, self._on_hover)
+        self._chart_alt = ChartCanvas('Profil altimétrique', C_ALT, self._on_hover, self._on_chart_click)
+        self._chart_spd = ChartCanvas('Vitesse (km/h)',       C_SPD, self._on_hover, self._on_chart_click)
         self._stats     = StatsPanel()
 
         # Splitter graphiques (horizontal, en bas)
@@ -600,6 +600,9 @@ class MainWindow(QMainWindow):
         self._chart_spd.update_cursor(index)
         if self._gps:
             self._stats.update_cursor(self._gps, index)
+
+    def _on_chart_click(self, index):
+        self._map.center_on_point(index)
 
     # ── Sélection de la trace active pour les graphiques ─────────────
 

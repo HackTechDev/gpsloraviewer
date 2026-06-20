@@ -1431,6 +1431,21 @@ class MapCanvas(FigureCanvas):
                 self._cursor_annot.set_visible(False)
         self.draw_idle()
 
+    def center_on_point(self, index):
+        """Recentre la carte sur le point GPS à cet index, en conservant le zoom."""
+        if self._gps is None or index is None or not (0 <= index < self._gps.count):
+            return
+        x = float(self._gps.xs[index])
+        y = float(self._gps.ys[index])
+        xl = self.ax.get_xlim()
+        yl = self.ax.get_ylim()
+        hw = (xl[1] - xl[0]) / 2
+        hh = (yl[1] - yl[0]) / 2
+        self.ax.set_xlim(x - hw, x + hw)
+        self.ax.set_ylim(y - hh, y + hh)
+        self._request_tiles()
+        self.draw_idle()
+
     # ── Mesure de distance ───────────────────────────────────────────
 
     def set_measure_mode(self, active: bool):

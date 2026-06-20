@@ -31,7 +31,7 @@ def _fmt_elapsed(s: float) -> str:
 # ══════════════════════════════════════════════════════════════════════
 
 class ChartCanvas(FigureCanvas):
-    def __init__(self, title: str, color: str, on_hover):
+    def __init__(self, title: str, color: str, on_hover, on_click=None):
         self.fig = Figure(facecolor='#f7f8fa')
         super().__init__(self.fig)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -39,6 +39,7 @@ class ChartCanvas(FigureCanvas):
         self._title = title
         self._color = color
         self._on_hover = on_hover
+        self._on_click = on_click
         self._vline             = None
         self._dist_arr          = None
         self._total_dist        = None
@@ -47,9 +48,10 @@ class ChartCanvas(FigureCanvas):
         self._cursor_annot      = None
         self._show_cursor_info  = True
         self._draw_empty()
-        self.mpl_connect('motion_notify_event', self._mouse_move)
-        self.mpl_connect('axes_leave_event',    lambda _: on_hover(None))
-        self.mpl_connect('figure_leave_event',  lambda _: on_hover(None))
+        self.mpl_connect('motion_notify_event',  self._mouse_move)
+        self.mpl_connect('button_press_event',   self._mouse_click)
+        self.mpl_connect('axes_leave_event',     lambda _: on_hover(None))
+        self.mpl_connect('figure_leave_event',   lambda _: on_hover(None))
 
     def _style_ax(self):
         self.ax.set_facecolor('#ffffff')
@@ -215,3 +217,11 @@ class ChartCanvas(FigureCanvas):
             return
         idx = int(np.argmin(np.abs(self._dist_arr - event.xdata)))
         self._on_hover(idx)
+
+    def _mouse_click(self, event):
+        if event.inaxes != self.ax or self._dist_arr is None or self._on_click is None:
+            return
+        if event.button != 1:
+            return
+        idx = int(np.argmin(np.abs(self._dist_arr - event.xdata)))
+        self._on_click(idx)
