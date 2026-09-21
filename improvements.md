@@ -96,11 +96,11 @@
 ## Récepteur LoRa / Intégration PC
 
 - ~~**Script de réception PC**~~ ✅ Implémenté — `lora_receiver.py` lit le port série, écrit les trames NMEA dans `tracks/gps/LORA_*.txt`, lisible dans GPS Viewer. Lanceur `runLoRaReceiver.sh` fourni.
-- **Validation checksum dans lora_receiver.py** : vérifier le checksum NMEA avant d'écrire dans le fichier pour rejeter les trames corrompues par la liaison LoRa
+- **Validation checksum dans lora_receiver.py et lora_thread.py** : vérifier le checksum NMEA avant d'écrire dans le fichier pour rejeter les trames corrompues par la liaison LoRa (à implémenter une seule fois dans `gps_nmea.py`, voir « Qualité du code »)
 - **Reconnexion automatique** : si le port série est déconnecté (Arduino débranché), tenter de se reconnecter périodiquement au lieu de planter
 - **Baud rate configurable** : option `--baud` pour `lora_receiver.py` (actuellement 115200 codé en dur)
 - **Affichage RSSI dans le terminal** : reformater les lignes `#` pour afficher le signal de façon plus lisible (ex : `[12] RSSI: -87 dBm`)
-- **Réception temps réel dans GPS Viewer** : intégrer `lora_receiver.py` directement dans `gps_viewer.py` pour afficher la position live sur la carte sans fichier intermédiaire
+- ~~**Réception temps réel dans GPS Viewer**~~ ✅ Implémenté — `lora_thread.py` (QThread) reçoit les trames `$GPRMC` / `$GPGGA` et alimente la carte avec un log live
 - **ACK et qualité de liaison** : afficher le RSSI reçu dans l'interface GPS Viewer
 - **Rejeu différé** : détecter automatiquement les fichiers `LORA_*.txt` dans `tracks/gps/` et les proposer à l'ouverture
 
@@ -111,3 +111,24 @@
 - **Génération de rapport PDF** : rapport automatique incluant la carte, les graphiques et les statistiques
 - **Serveur web embarqué** : option pour exposer la carte HTML sur le réseau local afin de la consulter depuis un smartphone
 - **Carte HTML hors-ligne** : remplacer les CDN Chart.js par des ressources locales pour que `gps_map.py` fonctionne sans Internet
+
+## Qualité du code
+
+- **Supprimer la duplication du parseur NMEA** : `gps_map.py` réécrit `nmea_to_decimal`, `haversine_m`, `parse_time_s`, `_smooth` et `parse_gpgga`, déjà présents dans `gps_nmea.py` — les importer à la place
+- **Regrouper les fonctions de formatage** : `_fmt_dist` et `_fmt_elapsed` sont copiées dans `chart_canvas.py` et `map_canvas.py` — les placer dans un module commun
+- **Factoriser la réception LoRa** : `lora_receiver.py` (ligne de commande) et `lora_thread.py` (interface) partagent la détection de port, l'écriture du fichier et le filtrage des trames
+- **Découper les gros fichiers** : `map_canvas.py` (~2 100 lignes) et `gps_viewer.py` (~1 600 lignes, dont une classe `MainWindow` d'environ 1 470 lignes) — extraire la gestion des fichiers/sessions, les menus et les outils de la carte (mesure, photos, notes)
+- **Tests automatisés** : aucun test actuellement — commencer par `pytest` sur le parseur NMEA, la projection Web Mercator, la distance et le lissage (testables sans interface)
+
+## Documentation et packaging
+
+- **`requirements.txt`** : lister les dépendances (PyQt5, matplotlib, contextily, numpy, Pillow, folium, pyserial) pour une installation reproductible dans un venv
+- **Mettre le README à jour** : mentionner `$GPGGA` (LoRa Live) et `lora_thread.py`, retirer `rf95_client/` (absent du dépôt), documenter la création du venv
+- **`runLoRaReceiver.sh` et venv** : appliquer le même choix de `.venv/bin/python` que `runGPSLoRa.sh`
+- **Lanceur Windows** : fournir un `.bat` équivalent aux scripts shell
+
+## Nettoyage du dépôt
+
+- **Retirer `GPS02_map.html` du suivi git** : fichier généré par `gps_map.py` (161 Ko), à ajouter au `.gitignore`
+- **Supprimer `claude_task.md`** : ne contient que des commandes `claude --resume`
+- **Alléger la bibliothèque RadioHead embarquée** : supprimer les fichiers CI (`.travis.yml`, `.gitlab-ci.yml`, `.github/`) et le doublon de `rf95_server.ino` dans `lib/Grove_LoRa_Radio/examples/`
