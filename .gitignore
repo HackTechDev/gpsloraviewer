@@ -5,3 +5,4 @@ gps_viewer/tracks/track.json
 
 # Traces GPS brutes
 gps_viewer/tracks/gps/GPS*.txt
+.venv/
