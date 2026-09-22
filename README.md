@@ -30,9 +30,9 @@ gpslora/
 │       └── Grove_LoRa_Radio/      #   Bibliothèque RadioHead patchée (AVR fix)
 ├── exemples/                      # Exemples de sketches Arduino
 ├── runGPSLoRa.sh                  # Lanceur (Linux/macOS)
-├── features.md                    # Description détaillée des fonctionnalités
-├── improvements.md                # Pistes d'amélioration
-└── user_guide.md                  # Guide utilisateur
+├── FEATURES.md                    # Description détaillée des fonctionnalités
+├── IMPROVEMENTS.md                # Pistes d'amélioration
+└── USER_GUIDE.md                  # Guide utilisateur
 ```
 
 ## Démarrage rapide
