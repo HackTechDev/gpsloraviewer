@@ -1,4 +1,5 @@
 __pycache__/
+.pytest_cache/
 gps_viewer/tracks/
 gps_viewer/tracks/images/
 gps_viewer/tracks/track.json
@@ -6,3 +7,6 @@ gps_viewer/tracks/track.json
 # Traces GPS brutes
 gps_viewer/tracks/gps/GPS*.txt
 .venv/
+
+# Cartes HTML générées par gps_map.py
+*_map.html

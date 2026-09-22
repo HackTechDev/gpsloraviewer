@@ -132,6 +132,6 @@
 
 ## Nettoyage du dépôt
 
-- **Retirer `GPS02_map.html` du suivi git** : fichier généré par `gps_map.py` (161 Ko), à ajouter au `.gitignore`
+- ~~**Retirer `GPS02_map.html` du suivi git**~~ ✅ Implémenté — `git rm --cached`, motif `*_map.html` ajouté au `.gitignore` (couvre toute sortie de `gps_map.py`, pas seulement ce fichier)
 - **Supprimer `claude_task.md`** : ne contient que des commandes `claude --resume`
 - **Alléger la bibliothèque RadioHead embarquée** : supprimer les fichiers CI (`.travis.yml`, `.gitlab-ci.yml`, `.github/`) et le doublon de `rf95_server.ino` dans `lib/Grove_LoRa_Radio/examples/`
