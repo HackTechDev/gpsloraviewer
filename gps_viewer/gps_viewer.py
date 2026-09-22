@@ -14,6 +14,7 @@ import glob
 import shutil
 import json
 import datetime
+import traceback
 from pathlib import Path
 
 import contextily as cx
@@ -50,6 +51,26 @@ _MAX_RECENT       = 10
 _TRACKS_DIR     = Path(__file__).parent / 'tracks'
 _TRACKS_IMG_DIR = _TRACKS_DIR / 'images'
 _TRACKS_JSON    = _TRACKS_DIR / 'track.json'
+
+
+def _to_portable_path(path: str) -> str:
+    """Convertit un chemin absolu en chemin relatif au répertoire utilisateur
+    (préfixe '~'), pour que le fichier de trace reste valide si le projet
+    est déplacé ou ouvert sous un autre compte."""
+    try:
+        rel = os.path.relpath(os.path.abspath(path), str(Path.home()))
+    except ValueError:
+        # Chemin sur un autre disque que le home (Windows) : inchangé
+        return path
+    if rel.startswith('..'):
+        # En dehors du répertoire utilisateur : conserver le chemin absolu
+        return path
+    return '~/' + rel.replace(os.sep, '/')
+
+
+def _from_portable_path(path: str) -> str:
+    """Résout un chemin stocké dans un fichier de trace ('~/...' ou absolu)."""
+    return os.path.expanduser(path)
 
 
 def _extract_time_strs(gps) -> list:
@@ -1111,8 +1132,8 @@ class MainWindow(QMainWindow):
             {
                 'lat':         round(e['lat'], 8),
                 'lon':         round(e['lon'], 8),
-                'file':        os.path.abspath(e['orig_path']),
-                'thumb':       os.path.abspath(e['thumb_path']),
+                'file':        _to_portable_path(e['orig_path']),
+                'thumb':       _to_portable_path(e['thumb_path']),
                 'titre':       e.get('titre', ''),
                 'description': e.get('description', ''),
                 'angle':       e.get('angle'),
@@ -1131,7 +1152,7 @@ class MainWindow(QMainWindow):
         data = {
             'titre':       self._parcours_titre,
             'description': self._parcours_description,
-            'gps_files':   [os.path.abspath(g.filepath) for g in self._gps_list],
+            'gps_files':   [_to_portable_path(g.filepath) for g in self._gps_list],
             'photos':      photos,
             'notes':       notes,
         }
@@ -1144,11 +1165,12 @@ class MainWindow(QMainWindow):
     def _resolve_media_path(self, path_str: str) -> str | None:
         """Résout un chemin media en chemin absolu existant.
 
-        Essaie dans l'ordre : absolu, relatif au JSON, relatif au CWD.
+        Essaie dans l'ordre : ~/… (répertoire utilisateur), absolu,
+        relatif au JSON, relatif au CWD.
         """
         if not path_str:
             return None
-        p = Path(path_str)
+        p = Path(_from_portable_path(path_str))
         if p.is_absolute():
             return str(p) if p.exists() else None
         # Relatif au répertoire du fichier JSON
@@ -1163,7 +1185,11 @@ class MainWindow(QMainWindow):
     def _load_track_json(self):
         """Charge les traces GPS et les annotations photo depuis le fichier actif."""
         if not self._current_track_path.exists():
+            print(f'[JSON] Fichier introuvable : {self._current_track_path}')
+            self._sb.showMessage(
+                f'Fichier introuvable : {self._current_track_path}')
             return
+        print(f'[JSON] Ouverture de {self._current_track_path}')
         try:
             data = json.loads(self._current_track_path.read_text(encoding='utf-8'))
 
@@ -1185,7 +1211,7 @@ class MainWindow(QMainWindow):
                 x_m, y_m  = to_webmerc(lat, lon)
                 thumb = self._resolve_media_path(item.get('thumb', ''))
                 orig  = self._resolve_media_path(item.get('file', '')) \
-                        or item.get('file', '')
+                        or _from_portable_path(item.get('file', ''))
                 if thumb:
                     entries.append({
                         'x_m':         x_m,
@@ -1227,12 +1253,42 @@ class MainWindow(QMainWindow):
             self._track_sel_action.setVisible(False)
             self._track_sel_sep.setVisible(False)
 
+            missing = []
             for gps_file in gps_files:
-                if Path(gps_file).exists():
-                    self._load(gps_file)
+                resolved = _from_portable_path(gps_file)
+                if Path(resolved).exists():
+                    print(f'[JSON]   trace GPS : {resolved}')
+                    self._load(resolved)
+                else:
+                    print(f'[JSON]   trace GPS introuvable, ignorée : {resolved}')
+                    missing.append(resolved)
 
-        except Exception:
-            pass
+            print(f'[JSON] OK — {len(gps_files)} trace(s) référencée(s), '
+                  f'{len(missing)} introuvable(s), '
+                  f'{len(entries)} photo(s), {len(note_entries)} note(s)')
+
+            if missing and len(missing) == len(gps_files):
+                self._sb.showMessage(
+                    'Aucune trace GPS trouvée — chemins introuvables '
+                    f'({len(missing)}), voir la console.')
+                QMessageBox.warning(self, 'Traces GPS introuvables',
+                    "Le fichier de trace ne référence aucun fichier GPS "
+                    "accessible à cet emplacement (chemins absolus obsolètes "
+                    "ou fichiers déplacés) :\n\n"
+                    + '\n'.join(missing[:10])
+                    + ('\n…' if len(missing) > 10 else ''))
+            elif missing:
+                self._sb.showMessage(
+                    f'{len(missing)} trace(s) GPS introuvable(s), voir la console.')
+
+        except Exception as exc:
+            print(f'[JSON] Échec du chargement de {self._current_track_path} : {exc}')
+            traceback.print_exc()
+            self._sb.showMessage(
+                f'Erreur lors du chargement du fichier JSON : {exc}')
+            QMessageBox.critical(self, 'Erreur de chargement',
+                'Impossible de charger le fichier de trace :\n'
+                f'{self._current_track_path}\n\n{exc}')
 
     # ── Ouverture / enregistrement de la trace ────────────────────────
 
