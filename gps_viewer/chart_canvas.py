@@ -175,11 +175,11 @@ class ChartCanvas(FigureCanvas):
                 if self._elapsed_arr is not None and index < len(self._elapsed_arr):
                     el = self._elapsed_arr[index]
                     if el is not None:
-                        parts.append(f'⏱ {_fmt_elapsed(el)}')
+                        parts.append(f'Δ {_fmt_elapsed(el)}')
                 if self._time_strs is not None and index < len(self._time_strs):
                     ts = self._time_strs[index]
                     if ts:
-                        parts.append(f'🕐 {ts}')
+                        parts.append(f'◷ {ts}')
                 txt = '\n'.join(parts)
                 ha  = 'left' if index < len(self._dist_arr) * 0.6 else 'right'
                 if self._cursor_annot is None:

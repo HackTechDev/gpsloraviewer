@@ -1414,14 +1414,14 @@ class MapCanvas(FigureCanvas):
                 lines = [f'↑ {_fmt_dist(dist)}', f'↓ {_fmt_dist(remaining)}']
                 el = self._gps.elapsed_times[index]
                 if el is not None:
-                    lines.append(f'⏱ {_fmt_elapsed(el)}')
+                    lines.append(f'Δ {_fmt_elapsed(el)}')
                 pt = self._gps.points[index]
                 t_raw = pt.get('time', '')
                 if t_raw:
                     # "HH:MM:SS UTC" → "HH:MM"
                     parts = t_raw.replace(' UTC', '').split(':')
                     if len(parts) >= 2:
-                        lines.append(f'🕐 {parts[0]}:{parts[1]}')
+                        lines.append(f'◷ {parts[0]}:{parts[1]}')
                 self._cursor_annot.xy = (x, y)
                 self._cursor_annot.set_text('\n'.join(lines))
                 self._cursor_annot.set_visible(self._show_cursor_info)

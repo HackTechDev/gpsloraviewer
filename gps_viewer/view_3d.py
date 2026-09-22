@@ -805,10 +805,10 @@ class View3DWindow(QDialog):
         parts.append(f'↑ {_fmt_dist(d_done)}  ↓ {_fmt_dist(d_left)}')
         et = gps.elapsed_times[idx] if gps.elapsed_times else None
         if et is not None:
-            parts.append(f'⏱ {_fmt_elapsed(et)}')
+            parts.append(f'Δ {_fmt_elapsed(et)}')
         t_str = gps.points[idx].get('time', '') if gps.points else ''
         if t_str and len(t_str) >= 5:
-            parts.append(f'🕐 {t_str[:5]}')
+            parts.append(f'◷ {t_str[:5]}')
         return '  │  '.join(parts)
 
     def _update_anim_dots(self, index: int):
