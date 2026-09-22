@@ -117,7 +117,10 @@
 - ~~**Supprimer la duplication du parseur NMEA**~~ ✅ Implémenté — `gps_map.py` importe `nmea_to_decimal`, `haversine_m`, `parse_time_s`, `_smooth`, `parse_gpgga` et `load_points` depuis `gps_nmea.py` au lieu de les réécrire
 - ~~**Regrouper les fonctions de formatage**~~ ✅ Implémenté — `_fmt_dist`/`_fmt_elapsed` déplacées dans `gps_nmea.py`, réexportées par `map_canvas.py` pour `view_3d.py`
 - ~~**Factoriser la réception LoRa**~~ ✅ Implémenté — nouveau module `lora_common.py` (`detect_port`, `detect_serial_ports`, `default_lora_output_path`) partagé par `lora_receiver.py`, `lora_thread.py` et `dialogs.py`
-- **Découper les gros fichiers** : `map_canvas.py` (~2 100 lignes) et `gps_viewer.py` (~1 600 lignes, dont une classe `MainWindow` d'environ 1 470 lignes) — extraire la gestion des fichiers/sessions, les menus et les outils de la carte (mesure, photos, notes)
+- **Découper les gros fichiers** — partiellement fait :
+  - ~~`map_canvas.py`~~ ✅ l'infrastructure de tuiles (`_TileCache`, `_TileWorker`, `_ContourWorker`, `_douglas_peucker_mask`, cache disque) est extraite dans `map_tiles.py` (2 202 → 2 007 lignes)
+  - ~~`gps_viewer.py`~~ ✅ la persistance (préférences, mise en page, fichiers récents, dernier parcours) est extraite dans `app_config.py` via `PersistenceMixin` (1 725 → 1 602 lignes)
+  - Reste à faire : les menus et les outils de la carte (mesure, photos, notes) dans `MapCanvas`/`MainWindow` restent volumineux
 - **Tests automatisés** : aucun test actuellement — commencer par `pytest` sur le parseur NMEA, la projection Web Mercator, la distance et le lissage (testables sans interface)
 
 ## Documentation et packaging

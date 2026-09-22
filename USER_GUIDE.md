@@ -522,13 +522,16 @@ Les tuiles cartographiques sont stockées dans `~/.cache/gps_viewer/tiles/`.
 gpsloraviewer/
 ├── gps_viewer/
 │   ├── gps_viewer.py      # Fenêtre principale + point d'entrée
+│   ├── app_config.py      # Config + persistance (préférences, mise en page, récents)
 │   ├── map_canvas.py      # Widget carte (matplotlib + contextily)
+│   ├── map_tiles.py       # Cache/threads de tuiles (OSM, SRTM), Douglas-Peucker
 │   ├── chart_canvas.py    # Graphiques altitude / vitesse
 │   ├── stats_panel.py     # Panneau de statistiques
-│   ├── gps_nmea.py        # Parseur NMEA et modèle de données GPS
+│   ├── gps_nmea.py        # Parseur NMEA, checksum, modèle de données GPS
 │   ├── dialogs.py         # Boîtes de dialogue (coordonnées, photo, parcours, préférences)
 │   ├── view_3d.py         # Vue 3D (matplotlib mpl_toolkits)
 │   ├── gps_map.py         # Générateur de carte HTML autonome (Folium)
+│   ├── lora_common.py     # Détection de port, chemin de sortie LoRa (partagé)
 │   ├── lora_receiver.py   # Réception LoRa → fichier NMEA (ligne de commande)
 │   ├── lora_thread.py     # Réception LoRa en direct (QThread, intégrée à l'appli)
 │   ├── logo.png           # Logo du splash screen (à créer)

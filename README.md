@@ -7,14 +7,17 @@ Système complet de suivi GPS : acquisition sur le terrain via Arduino, transmis
 ```
 gpsloraviewer/
 ├── gps_viewer/                    # Application desktop PyQt5
-│   ├── gps_viewer.py              #   Point d'entrée principal
-│   ├── gps_nmea.py                #   Parseur NMEA
+│   ├── gps_viewer.py              #   Point d'entrée principal (MainWindow)
+│   ├── app_config.py              #   Chemins de config + persistance (préférences, mise en page, récents)
+│   ├── gps_nmea.py                #   Parseur NMEA, checksum, formatage
 │   ├── map_canvas.py              #   Widget carte (matplotlib + contextily)
+│   ├── map_tiles.py               #   Cache/threads de tuiles (OSM, SRTM), Douglas-Peucker
 │   ├── chart_canvas.py            #   Widget graphiques
 │   ├── stats_panel.py             #   Panneau de statistiques
 │   ├── dialogs.py                 #   Boîtes de dialogue
 │   ├── view_3d.py                 #   Vue 3D (matplotlib 3D + OSM)
 │   ├── gps_map.py                 #   Générateur carte HTML (Folium)
+│   ├── lora_common.py             #   Détection de port, chemin de sortie LoRa (partagé)
 │   ├── lora_receiver.py           #   Réception LoRa → fichier NMEA (ligne de commande, pyserial)
 │   ├── lora_thread.py             #   Réception LoRa en direct (QThread, intégrée à l'appli)
 │   └── tracks/                    #   Données utilisateur (non versionnées)
