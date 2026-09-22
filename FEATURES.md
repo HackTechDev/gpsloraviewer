@@ -3,7 +3,8 @@
 ## Fichier de trace JSON
 
 Le fichier de trace JSON est le document central de l'application. Il regroupe :
-- les chemins absolus vers une ou plusieurs traces GPS NMEA
+- les chemins vers une ou plusieurs traces GPS NMEA (enregistrés relatifs au répertoire
+  utilisateur `~/...` pour rester valides si le projet est déplacé)
 - toutes les annotations photo (position, miniature, titre, description, angle de vue)
 - toutes les annotations note (position, titre, description)
 
@@ -22,19 +23,20 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
 - Au **démarrage** sans argument, le dernier fichier JSON utilisé est rouvert automatiquement (`~/.config/gps_viewer/last_track.txt`)
 - **Fichiers récents JSON** : menu Fichier → Fichiers récents JSON (10 derniers, persistés dans `~/.config/gps_viewer/recent_tracks.json`)
 - **Glisser-déposer** d'un fichier `.txt` / `.nmea` / `.log` directement sur la fenêtre
-- **Argument en ligne de commande** : `python3 gps_viewer/gps_viewer.py fichier.txt`
+- **Argument en ligne de commande** : `python3 gps_viewer/gps_viewer.py fichier.txt` (ajoute une trace) ou `python3 gps_viewer/gps_viewer.py parcours.json` (ouvre le parcours)
 - La barre de titre indique : `GPS Viewer  [nom.json] — fichier.txt`
+- En cas d'erreur au chargement d'un fichier JSON (JSON invalide, trace GPS référencée introuvable) : message détaillé à l'écran et trace complète dans la console, plutôt qu'un échec silencieux
 
 ### Format JSON
 
 ```json
 {
-  "gps_files": ["/chemin/absolu/gps_viewer/tracks/gps/GPS01.txt"],
+  "gps_files": ["~/gpsloraviewer/gps_viewer/tracks/gps/GPS01.txt"],
   "photos": [
     {
       "lat": 48.123456, "lon": 7.654321,
-      "file": "/chemin/absolu/gps_viewer/tracks/images/photo_20250101_001.jpg",
-      "thumb": "/chemin/absolu/gps_viewer/tracks/images/photo_20250101_001_thumb.jpg",
+      "file": "~/gpsloraviewer/gps_viewer/tracks/images/photo_20250101_001.jpg",
+      "thumb": "~/gpsloraviewer/gps_viewer/tracks/images/photo_20250101_001_thumb.jpg",
       "titre": "Titre optionnel",
       "description": "Description optionnelle",
       "angle": 90.0
@@ -49,6 +51,10 @@ Le fichier de trace JSON est le document central de l'application. Il regroupe :
   ]
 }
 ```
+
+Les chemins (`gps_files`, `file`, `thumb`) sont enregistrés relatifs au répertoire
+utilisateur (`~/...`) plutôt qu'en absolu, pour rester valides si le projet est déplacé
+ou renommé. Un chemin situé en dehors de `$HOME` reste enregistré en absolu.
 
 ## Traces GPS
 
@@ -84,6 +90,11 @@ Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :**
 
 Changement via le bouton `🗺 Fond de carte` dans la barre d'outils.
 
+Le chargement des tuiles est asynchrone (`QThread`, ne bloque pas l'interface) et
+protégé par un délai de garde de 20 s : en cas de réseau indisponible ou trop lent, le
+message « Chargement des tuiles… » est remplacé par une indication d'erreur au lieu de
+rester affiché indéfiniment.
+
 ### Coloration de la trace
 
 Sélectionnable via le bouton `🎨 Trace` :
@@ -117,8 +128,8 @@ Le curseur rouge (point) se déplace sur la trace GPS lors du survol des graphiq
 |-------|---------|
 | ↑ | Distance parcourue depuis le départ |
 | ↓ | Distance restante jusqu'à l'arrivée |
-| ⏱ | Temps écoulé depuis le départ (min ou h min) |
-| 🕐 | Heure GPS au point courant (HH:MM) |
+| Δ | Temps écoulé depuis le départ (min ou h min) |
+| ◷ | Heure GPS au point courant (HH:MM) |
 
 La boîte est masquable via **Paramétrage → Afficher distance parcourue / restante**.
 
@@ -197,6 +208,16 @@ Affiché en permanence à droite de la carte :
 
 La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent également le D+ et le D−.
 
+## Réception LoRa en temps réel (LoRa Live)
+
+- Bouton bascule `📡 LoRa Live` dans la barre d'outils : démarre / arrête la réception GPS en direct via un récepteur LoRa branché en USB, sans passer par un fichier intermédiaire
+- Boîte de dialogue de connexion : port série (détection automatique `/dev/ttyUSB*` / `/dev/ttyACM*`, saisie manuelle possible) et vitesse (9600 à 115 200 bauds)
+- Trames reconnues : `$GPGGA`/`$GNGGA` et `$GPRMC`/`$GNRMC`
+- **Panneau Log LoRa Live** (sous les graphiques) : historique des 500 dernières positions reçues (heure, latitude, longitude, altitude, satellites, HDOP), bouton **Vider**
+- La trace s'affiche en direct sur la carte à mesure des réceptions ; graphiques et statistiques se rafraîchissent toutes les 3 s
+- Chaque position reçue est enregistrée dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
+- À l'arrêt de la réception : propose de charger la trace enregistrée sur la carte (si au moins 2 positions valides ont été reçues)
+
 ## Navigation par coordonnées
 
 - Menu **Navigation → Aller aux coordonnées…** (Ctrl+G) ou bouton `📍 Coordonnées`
@@ -240,7 +261,7 @@ Une **barre de lecture** (fond sombre) est affichée sous le canvas 3D :
 |----------|-------------|
 | ⏮ | Retour au point de départ |
 | ▶ Animer / ⏸ Pause | Démarrer ou suspendre l'animation |
-| Compteur | `point N / total  │  ↑ dist  │  ↓ dist  │  ⏱ temps  │  🕐 heure` |
+| Compteur | `point N / total  │  ↑ dist  │  ↓ dist  │  Δ temps  │  ◷ heure` |
 | × 1 / × 2 / × 5 / × 10 | Nombre de points avancés par tick de 100 ms |
 | **Scrubber** | Glissière pleine largeur pour se positionner librement |
 
@@ -335,7 +356,7 @@ Les préférences sont persistées dans `~/.config/gps_viewer/settings.json`.
 - Lit le port série de l'Arduino récepteur (115 200 baud) via **pyserial**
 - Détecte automatiquement le port `/dev/ttyUSB*` ou `/dev/ttyACM*`
 - Affiche toutes les lignes en temps réel (trames NMEA + diagnostics RSSI `#`)
-- Écrit uniquement les trames NMEA (`$GPRMC`…) dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
+- Écrit toute trame NMEA (`$...`) dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt` (en pratique `$GPRMC`, seule trame transmise par le firmware terrain)
 - `flush()` à chaque trame — le fichier est lisible en direct dans GPS Viewer
 - Ctrl+C arrête proprement et affiche le nombre de trames enregistrées
 - Dépendance : `pip install pyserial`

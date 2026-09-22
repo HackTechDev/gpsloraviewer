@@ -12,14 +12,14 @@ animer le parcours en 3D et ajouter vos premières annotations.
 ## Étape 1 — Lancer l'application
 
 ```bash
-cd gpslora/gps_viewer
-./run.sh
+cd gpsloraviewer
+./runGPSLoRa.sh
 ```
 
 Ou, si vous n'avez pas le script de lancement :
 
 ```bash
-python3 gps_viewer.py
+python3 gps_viewer/gps_viewer.py
 ```
 
 Un **écran de démarrage** s'affiche brièvement, puis la fenêtre principale apparaît.
@@ -98,8 +98,8 @@ Déplacez la souris sur le **graphique altimétrique** (en bas à gauche).
 - Une **boîte sombre** à côté du point rouge affiche :
   - ↑ distance parcourue
   - ↓ distance restante
-  - ⏱ temps écoulé depuis le départ
-  - 🕐 heure GPS
+  - Δ temps écoulé depuis le départ
+  - ◷ heure GPS
 
 Faites de même sur le **graphique de vitesse** (en bas à droite) : les deux graphiques
 et la carte sont toujours synchronisés.
@@ -232,7 +232,7 @@ Faites pivoter la scène pour voir le relief sous différents angles.
 4. Une **ligne verticale pointillée** relie les deux, indiquant l'altitude en temps réel.
 5. Le compteur affiche :
    ```
-   point 42 / 1 247  │  ↑ 1,3 km  ↓ 5,8 km  │  ⏱ 23 min  │  🕐 09:42
+   point 42 / 1 247  │  ↑ 1,3 km  ↓ 5,8 km  │  Δ 23 min  │  ◷ 09:42
    ```
 
 Essayez les vitesses **× 5** et **× 10** pour voir le relief défiler rapidement.

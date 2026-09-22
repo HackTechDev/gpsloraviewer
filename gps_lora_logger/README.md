@@ -146,8 +146,8 @@ Les lignes `#` sont des diagnostics ; un parseur NMEA standard les ignore.
 ```
 gps_lora_logger/
 ├── gps_lora_logger.ino        # Émetteur terrain (SD + LoRa TX)
-├── rf95_client/
-│   └── rf95_client.ino        # Sketch client LoRa de référence (RadioHead)
-└── rf95_server/
-    └── rf95_server.ino        # Récepteur base (LoRa RX → Serial USB)
+├── rf95_server/
+│   └── rf95_server.ino        # Récepteur base (LoRa RX → Serial USB)
+└── lib/
+    └── Grove_LoRa_Radio/      # Bibliothèque RadioHead patchée (AVR fix)
 ```

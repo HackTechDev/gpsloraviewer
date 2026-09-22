@@ -19,6 +19,7 @@
 15. [Enregistrer et gérer les fichiers](#15-enregistrer-et-gérer-les-fichiers)
 16. [Raccourcis clavier](#16-raccourcis-clavier)
 17. [Maintenance](#17-maintenance)
+18. [Réception LoRa en temps réel](#18-réception-lora-en-temps-réel)
 
 ---
 
@@ -40,26 +41,26 @@ Un **parcours** est un fichier `.json` qui regroupe :
 - les chemins vers les fichiers de traces GPS NMEA ;
 - les annotations photo (position, image, titre, description, angle de vue).
 
-C'est le document central de l'application. Il peut être partagé ou archivé ; il suffit de conserver les fichiers `.txt` et les photos aux mêmes emplacements absolus.
+C'est le document central de l'application. Les chemins vers les fichiers `.txt` et les photos sont enregistrés relatifs à votre répertoire utilisateur (`~/...`), pour rester valides si le dossier du projet est déplacé ou renommé (un chemin situé en dehors de `$HOME` reste enregistré en absolu). Le parcours peut être partagé ou archivé ; il suffit de conserver les fichiers `.txt` et les photos au même emplacement relatif à `$HOME`.
 
 ---
 
 ## 2. Démarrage
 
 ```bash
-# Lancement simple
-./run.sh
+# Lancement simple (depuis la racine du projet)
+./runGPSLoRa.sh
 
 # Ou directement
-python3 gps_viewer.py
+python3 gps_viewer/gps_viewer.py
 
 # Avec un fichier JSON en argument
-python3 gps_viewer.py mon_parcours.json
+python3 gps_viewer/gps_viewer.py mon_parcours.json
 ```
 
 Au démarrage sans argument, l'application rouvre automatiquement le **dernier parcours utilisé**.
 
-Un écran de démarrage s'affiche brièvement pendant le chargement. Pour personnaliser le logo, placez un fichier `logo.png` (carré, idéalement 96 × 96 px ou plus) à la racine du projet.
+Un écran de démarrage s'affiche brièvement pendant le chargement. Pour personnaliser le logo, placez un fichier `logo.png` (carré, idéalement 96 × 96 px ou plus) dans le dossier `gps_viewer/`.
 
 ---
 
@@ -147,6 +148,11 @@ Le bouton **🗺 Fond de carte** dans la barre d'outils permet de choisir parmi 
 
 Les tuiles téléchargées sont mises en **cache** sur le disque (`~/.cache/gps_viewer/tiles/`) et réutilisées lors des sessions suivantes.
 
+> Si le message « Chargement des tuiles… » persiste plus de 20 secondes, l'application
+> affiche « Tuiles indisponibles » à la place — cela indique un problème réseau (pas de
+> connexion, serveur injoignable). La carte reste utilisable (trace, graphiques,
+> annotations) même sans fond de carte.
+
 ### Coloration de la trace
 
 Le bouton **🎨 Trace** dans la barre d'outils propose trois modes de coloration :
@@ -165,8 +171,8 @@ Lorsque le curseur rouge se déplace sur la trace (via les graphiques ou la barr
 |-------|-------------|
 | ↑ | Distance parcourue depuis le départ |
 | ↓ | Distance restante jusqu'à l'arrivée |
-| ⏱ | Temps écoulé depuis le départ (ex : `42 min` ou `1h 07min`) |
-| 🕐 | Heure GPS au point courant (HH:MM) |
+| Δ | Temps écoulé depuis le départ (ex : `42 min` ou `1h 07min`) |
+| ◷ | Heure GPS au point courant (HH:MM) |
 
 Cette boîte est masquable via **Paramétrage → Afficher distance parcourue / restante**.
 
@@ -396,10 +402,10 @@ Pendant l'animation, trois éléments se déplacent en synchronisation pour chaq
 Le compteur affiche en permanence :
 
 ```
-point 42 / 1 247  │  ↑ 1,3 km  ↓ 5,8 km  │  ⏱ 23 min  │  🕐 09:42
+point 42 / 1 247  │  ↑ 1,3 km  ↓ 5,8 km  │  Δ 23 min  │  ◷ 09:42
 ```
 
-> Les indicateurs ↑ ↓ ⏱ 🕐 sont basés sur la première trace chargée.
+> Les indicateurs ↑ ↓ Δ ◷ sont basés sur la première trace chargée.
 > Glisser le scrubber pendant la lecture suspend le timer et le reprend au relâchement.
 
 ### Navigation 3D
@@ -513,7 +519,7 @@ Les tuiles cartographiques sont stockées dans `~/.cache/gps_viewer/tiles/`.
 ### Structure des fichiers du projet
 
 ```
-gpslora/
+gpsloraviewer/
 ├── gps_viewer/
 │   ├── gps_viewer.py      # Fenêtre principale + point d'entrée
 │   ├── map_canvas.py      # Widget carte (matplotlib + contextily)
@@ -522,11 +528,45 @@ gpslora/
 │   ├── gps_nmea.py        # Parseur NMEA et modèle de données GPS
 │   ├── dialogs.py         # Boîtes de dialogue (coordonnées, photo, parcours, préférences)
 │   ├── view_3d.py         # Vue 3D (matplotlib mpl_toolkits)
-│   ├── lora_receiver.py   # Réception trames LoRa via port série
+│   ├── gps_map.py         # Générateur de carte HTML autonome (Folium)
+│   ├── lora_receiver.py   # Réception LoRa → fichier NMEA (ligne de commande)
+│   ├── lora_thread.py     # Réception LoRa en direct (QThread, intégrée à l'appli)
 │   ├── logo.png           # Logo du splash screen (à créer)
-│   ├── run.sh             # Script de lancement
-│   └── tracks/
-│       └── images/        # Photos annotées et leurs miniatures
-├── gps_lora_logger/       # Firmware Arduino émetteur terrain
-└── rf95_server/           # Firmware Arduino récepteur base LoRa
+│   └── tracks/            # Données utilisateur (non versionnées)
+│       ├── gps/           # Traces NMEA brutes
+│       ├── images/        # Photos annotées et leurs miniatures
+│       └── *.json         # Fichiers de parcours
+├── gps_lora_logger/       # Firmware Arduino émetteur terrain + récepteur base
+│   └── rf95_server/       # Firmware Arduino récepteur base LoRa
+├── runGPSLoRa.sh          # Lanceur de l'application (racine du projet)
+└── runLoRaReceiver.sh     # Lanceur du récepteur LoRa en ligne de commande
 ```
+
+---
+
+## 18. Réception LoRa en temps réel
+
+En plus du script en ligne de commande `lora_receiver.py` (voir le README du projet),
+l'application peut recevoir et afficher les positions GPS **directement dans son
+interface**, sans fichier intermédiaire.
+
+### Démarrer la réception
+
+1. Branchez l'Arduino récepteur LoRa en USB.
+2. Cliquez sur le bouton bascule **📡 LoRa Live** dans la barre d'outils.
+3. Une boîte de dialogue s'ouvre :
+   - **Port série** : détecté automatiquement (`/dev/ttyUSB*` / `/dev/ttyACM*`) ou saisi manuellement.
+   - **Vitesse (baud)** : 115200 par défaut (doit correspondre au firmware Arduino).
+4. Cliquez **Connecter**.
+
+**Ce que vous devez voir :**
+- Un panneau **Log LoRa Live** apparaît sous les graphiques, listant chaque position reçue (heure, latitude, longitude, altitude, satellites, HDOP).
+- La trace s'affiche en direct sur la carte au fur et à mesure des réceptions.
+- Les graphiques et le panneau de statistiques se rafraîchissent toutes les 3 secondes.
+- La barre d'outils affiche `⬤  LoRa Live — N pts`.
+
+### Arrêter la réception
+
+Re-cliquez sur **📡 LoRa Live**. Si au moins deux positions valides ont été reçues, l'application propose de charger la trace enregistrée (`tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`) sur la carte, comme n'importe quelle autre trace GPS.
+
+> Le bouton **Vider** du panneau de log efface l'historique affiché sans arrêter la réception.

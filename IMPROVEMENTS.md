@@ -22,7 +22,7 @@
 ## Vue 3D
 
 - ~~**Courbes de niveau SRTM**~~ ✅ Implémenté — bouton `🏔 Courbes`, données SRTM, courbes toutes les 50 m avec étiquettes
-- ~~**Animation**~~ ✅ Implémenté — barre de lecture sous le canvas 3D : ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, scrubber ; point animé 3D + shadow au sol + ligne verticale reliant les deux ; indicateurs ↑↓⏱🕐 en temps réel
+- ~~**Animation**~~ ✅ Implémenté — barre de lecture sous le canvas 3D : ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, scrubber ; point animé 3D + shadow au sol + ligne verticale reliant les deux ; indicateurs ↑↓Δ◷ en temps réel
 - **Exagération verticale configurable** : slider pour multiplier l'axe Z et rendre le relief plus lisible sur les terrains plats
 - **Extrusion du profil altimétrique** : afficher les murs verticaux sous la trace pour mieux visualiser le dénivelé
 - **Curseur 3D synchronisé** : le survol d'un graphique déplace également un repère dans la vue 3D
@@ -62,7 +62,7 @@
 ## Barre de lecture / Suivi
 
 - ~~**Barre de lecture « Suivre »**~~ ✅ Implémenté — ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, pan automatique, synchronisation graphiques
-- ~~**Annotation curseur distance + temps**~~ ✅ Implémenté — boîte sombre : ↑ parcouru, ↓ restant, ⏱ temps écoulé, 🕐 heure GPS ; visible sur la carte et les deux graphiques
+- ~~**Annotation curseur distance + temps**~~ ✅ Implémenté — boîte sombre : ↑ parcouru, ↓ restant, Δ temps écoulé, ◷ heure GPS ; visible sur la carte et les deux graphiques
 - ~~**Barre de progression de lecture (scrubber)**~~ ✅ Implémenté — slider pleine largeur sous les contrôles, clic/glisser pour se positionner librement
 - **Curseur cliquable** : cliquer sur la trace pour positionner manuellement le curseur de lecture
 
@@ -123,7 +123,7 @@
 ## Documentation et packaging
 
 - **`requirements.txt`** : lister les dépendances (PyQt5, matplotlib, contextily, numpy, Pillow, folium, pyserial) pour une installation reproductible dans un venv
-- **Mettre le README à jour** : mentionner `$GPGGA` (LoRa Live) et `lora_thread.py`, retirer `rf95_client/` (absent du dépôt), documenter la création du venv
+- ~~**Mettre le README à jour**~~ ✅ Implémenté — mention de `lora_thread.py`, retrait de `rf95_client/` (absent du dépôt), documentation de la création du venv ; fonctionnalité LoRa Live détaillée dans FEATURES.md et USER_GUIDE.md
 - **`runLoRaReceiver.sh` et venv** : appliquer le même choix de `.venv/bin/python` que `runGPSLoRa.sh`
 - **Lanceur Windows** : fournir un `.bat` équivalent aux scripts shell
 

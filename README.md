@@ -5,7 +5,7 @@ Système complet de suivi GPS : acquisition sur le terrain via Arduino, transmis
 ## Architecture du projet
 
 ```
-gpslora/
+gpsloraviewer/
 ├── gps_viewer/                    # Application desktop PyQt5
 │   ├── gps_viewer.py              #   Point d'entrée principal
 │   ├── gps_nmea.py                #   Parseur NMEA
@@ -15,7 +15,8 @@ gpslora/
 │   ├── dialogs.py                 #   Boîtes de dialogue
 │   ├── view_3d.py                 #   Vue 3D (matplotlib 3D + OSM)
 │   ├── gps_map.py                 #   Générateur carte HTML (Folium)
-│   ├── lora_receiver.py           #   Réception LoRa → fichier NMEA (pyserial)
+│   ├── lora_receiver.py           #   Réception LoRa → fichier NMEA (ligne de commande, pyserial)
+│   ├── lora_thread.py             #   Réception LoRa en direct (QThread, intégrée à l'appli)
 │   └── tracks/                    #   Données utilisateur (non versionnées)
 │       ├── gps/                   #     Traces NMEA brutes (GPS00.txt… LORA_*.txt)
 │       ├── images/                #     Photos annotées + miniatures
@@ -24,14 +25,14 @@ gpslora/
 │   ├── gps_lora_logger.ino        #   Émetteur terrain (SD + LoRa TX)
 │   ├── rf95_server/
 │   │   └── rf95_server.ino        #   Récepteur base (LoRa RX → Serial USB)
-│   ├── rf95_client/
-│   │   └── rf95_client.ino        #   Client LoRa de référence (RadioHead)
 │   └── lib/
 │       └── Grove_LoRa_Radio/      #   Bibliothèque RadioHead patchée (AVR fix)
 ├── exemples/                      # Exemples de sketches Arduino
-├── runGPSLoRa.sh                  # Lanceur (Linux/macOS)
+├── runGPSLoRa.sh                  # Lanceur de l'application (utilise .venv/ s'il existe)
+├── runLoRaReceiver.sh             # Lanceur du récepteur LoRa en ligne de commande
 ├── FEATURES.md                    # Description détaillée des fonctionnalités
 ├── IMPROVEMENTS.md                # Pistes d'amélioration
+├── TUTORIAL.md                    # Didacticiel pas à pas
 └── USER_GUIDE.md                  # Guide utilisateur
 ```
 
@@ -50,6 +51,12 @@ python3 gps_viewer/gps_viewer.py session.json
 ### Dépendances Python
 
 ```bash
+# Dans un environnement virtuel (recommandé) :
+python3 -m venv .venv
+.venv/bin/pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
+# runGPSLoRa.sh détecte automatiquement .venv/ s'il existe.
+
+# Ou directement sur le système :
 pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
 ```
 
@@ -116,7 +123,7 @@ python3 gps_viewer/lora_receiver.py --port /dev/ttyUSB0
 
 - Détecte automatiquement `/dev/ttyUSB*` ou `/dev/ttyACM*`
 - Affiche toutes les lignes en temps réel (trames NMEA + diagnostics RSSI)
-- Écrit uniquement les trames `$GPRMC` dans `gps_viewer/tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
+- Écrit toute trame NMEA (`$...`) dans `gps_viewer/tracks/gps/LORA_YYYYMMDD_HHMMSS.txt` (en pratique `$GPRMC`, seule trame transmise par le firmware terrain)
 - Le fichier est utilisable directement dans GPS Viewer
 - Ctrl+C pour arrêter proprement
 
@@ -154,17 +161,21 @@ python3 gps_viewer/lora_receiver.py --port /dev/ttyUSB0
 
 ```json
 {
-  "gps_files": ["/chemin/absolu/gps_viewer/tracks/gps/GPS01.txt"],
+  "gps_files": ["~/gpsloraviewer/gps_viewer/tracks/gps/GPS01.txt"],
   "photos": [
     {
       "lat": 48.123456, "lon": 7.654321,
-      "file": "/chemin/absolu/gps_viewer/tracks/images/photo_001.jpg",
-      "thumb": "/chemin/absolu/gps_viewer/tracks/images/photo_001_thumb.jpg",
+      "file": "~/gpsloraviewer/gps_viewer/tracks/images/photo_001.jpg",
+      "thumb": "~/gpsloraviewer/gps_viewer/tracks/images/photo_001_thumb.jpg",
       "titre": "Titre", "description": "...", "angle": 90.0
     }
   ]
 }
 ```
+
+Les chemins sont enregistrés relatifs au répertoire utilisateur (`~/...`) plutôt qu'en
+absolu, pour rester valides si le projet est déplacé ou renommé. Un chemin situé en
+dehors de `$HOME` reste enregistré en absolu.
 
 ### Raccourcis clavier
 
