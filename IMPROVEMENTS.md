@@ -4,7 +4,6 @@
 
 - **Export GPX / KML / GeoJSON** : permettre d'exporter la trace dans des formats standards utilisables dans d'autres outils (QGIS, Google Earth, Garmin, etc.)
 - **Import GPX** : lire directement les fichiers GPX produits par des appareils GPS commerciaux, en plus du format NMEA brut
-- ~~**Validation checksum NMEA**~~ ✅ Implémenté — `gps_nmea.verify_checksum()` (XOR entre `$` et `*`), utilisé par `parse_gprmc`/`parse_gpgga` : rejette les trames corrompues
 - **Filtrage HDOP** : rejeter automatiquement les points dont le HDOP dépasse un seuil configurable (ex : 5.0) pour améliorer la qualité des traces
 - **Segmentation automatique** : détecter les pauses (vitesse nulle prolongée) et découper la trace en segments distincts avec des statistiques par segment
 - **Détection de sauts GPS** : alerter si deux points consécutifs sont espacés de plus de 100 m sans cohérence temporelle (satellite perdu, redémarrage)
@@ -21,8 +20,6 @@
 
 ## Vue 3D
 
-- ~~**Courbes de niveau SRTM**~~ ✅ Implémenté — bouton `🏔 Courbes`, données SRTM, courbes toutes les 50 m avec étiquettes
-- ~~**Animation**~~ ✅ Implémenté — barre de lecture sous le canvas 3D : ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, scrubber ; point animé 3D + shadow au sol + ligne verticale reliant les deux ; indicateurs ↑↓Δ◷ en temps réel
 - **Exagération verticale configurable** : slider pour multiplier l'axe Z et rendre le relief plus lisible sur les terrains plats
 - **Extrusion du profil altimétrique** : afficher les murs verticaux sous la trace pour mieux visualiser le dénivelé
 - **Curseur 3D synchronisé** : le survol d'un graphique déplace également un repère dans la vue 3D
@@ -43,7 +40,6 @@
 
 ## Statistiques
 
-- ~~**Gain altimétrique D+ / D−**~~ ✅ Implémenté — affiché dans le panneau stats, la barre d'outils, la barre d'état et la vue 3D ; seuil 3 m pour filtrer le bruit GPS
 - **Pente moyenne** : pourcentage moyen sur l'ensemble du parcours
 - **Temps en mouvement** : distinguer temps total et temps effectivement en déplacement (vitesse > seuil)
 - **Vitesse moyenne en temps** : alternative à la vitesse moyenne en distance
@@ -51,9 +47,6 @@
 
 ## Interface
 
-- ~~**Persistance de la mise en page**~~ ✅ Implémenté — option dans Paramétrage → Préférences… ; mémorise la taille de fenêtre et la position des splitters dans `~/.config/gps_viewer/layout.json`
-- ~~**Affichage EXIF dans le visionneur photo**~~ ✅ Implémenté — date de prise, modèle d'appareil, focale affichés dans la boîte de dialogue de visionneuse
-- ~~**Rotation de photo**~~ ✅ Implémenté — boutons ↶ ↷ dans le visionneur pour corriger l'orientation sans quitter l'application
 - **Mode sombre** : thème sombre pour les graphiques, le panneau et la barre d'outils
 - **Raccourcis clavier supplémentaires** : `+` / `-` pour zoomer, flèches pour pan
 - **Plein écran** : touche F11 pour passer la carte en plein écran
@@ -61,14 +54,10 @@
 
 ## Barre de lecture / Suivi
 
-- ~~**Barre de lecture « Suivre »**~~ ✅ Implémenté — ⏮ ▶/⏸, vitesses ×1/×2/×5/×10, pan automatique, synchronisation graphiques
-- ~~**Annotation curseur distance + temps**~~ ✅ Implémenté — boîte sombre : ↑ parcouru, ↓ restant, Δ temps écoulé, ◷ heure GPS ; visible sur la carte et les deux graphiques
-- ~~**Barre de progression de lecture (scrubber)**~~ ✅ Implémenté — slider pleine largeur sous les contrôles, clic/glisser pour se positionner librement
 - **Curseur cliquable** : cliquer sur la trace pour positionner manuellement le curseur de lecture
 
 ## Annotations note
 
-- ~~**Annotations note sur la carte**~~ ✅ Implémenté — bouton 📝 Note (touche N), marqueur orange, titre affiché, édition et suppression au clic, sauvegarde JSON
 - **Icône personnalisable** : permettre de choisir la couleur ou le symbole du marqueur par note
 - **Affichage de la description au survol** : tooltip ou popup au passage de la souris sans avoir à cliquer
 - **Tri / liste des notes** : panneau latéral listant toutes les notes avec possibilité de cliquer pour centrer la carte sur la note
@@ -76,11 +65,6 @@
 
 ## Paramétrage
 
-- ~~**Épaisseur de la trace**~~ ✅ Implémenté — Paramétrage → Préférences…
-- ~~**Opacité du fond de carte**~~ ✅ Implémenté — Paramétrage → Préférences…
-- ~~**Taille des marqueurs photo**~~ ✅ Implémenté — Paramétrage → Préférences…
-- ~~**Taille du curseur rouge**~~ ✅ Implémenté — Paramétrage → Préférences…
-- ~~**Marge de déclenchement du pan automatique**~~ ✅ Implémenté — Paramétrage → Préférences…
 - **Seuil de dénivelé D+/D−** : rendre configurable le seuil de 3 m utilisé pour filtrer le bruit GPS
 - **Fenêtre de lissage vitesse** : paramétrer la taille de la fenêtre de lissage (actuellement 5 points)
 - **Couleurs de traces** : permettre de choisir la couleur de chaque trace manuellement
@@ -91,16 +75,12 @@
 - **Affichage OLED** : petit écran 128×32 affichant la position courante, la vitesse et l'état de la SD en temps réel
 - **Bouton pause/reprise** : permettre de stopper l'enregistrement sans couper l'alimentation
 - **Batterie et gestion d'énergie** : mode veille entre les trames pour réduire la consommation lors d'un usage sur batterie
-- ~~**Transmission LoRa**~~ ✅ Implémenté — SF7 (défaut RadioHead), 434 MHz, portée ~2–5 km, 1 envoi toutes les 10 s (duty cycle EU433 < 1 %)
 
 ## Récepteur LoRa / Intégration PC
 
-- ~~**Script de réception PC**~~ ✅ Implémenté — `lora_receiver.py` lit le port série, écrit les trames NMEA dans `tracks/gps/LORA_*.txt`, lisible dans GPS Viewer. Lanceur `runLoRaReceiver.sh` fourni.
-- ~~**Validation checksum dans lora_receiver.py et lora_thread.py**~~ ✅ Implémenté — les deux réutilisent `gps_nmea.verify_checksum()` avant d'écrire une trame sur disque
 - **Reconnexion automatique** : si le port série est déconnecté (Arduino débranché), tenter de se reconnecter périodiquement au lieu de planter
 - **Baud rate configurable** : option `--baud` pour `lora_receiver.py` (actuellement 115200 codé en dur)
 - **Affichage RSSI dans le terminal** : reformater les lignes `#` pour afficher le signal de façon plus lisible (ex : `[12] RSSI: -87 dBm`)
-- ~~**Réception temps réel dans GPS Viewer**~~ ✅ Implémenté — `lora_thread.py` (QThread) reçoit les trames `$GPRMC` / `$GPGGA` et alimente la carte avec un log live
 - **ACK et qualité de liaison** : afficher le RSSI reçu dans l'interface GPS Viewer
 - **Rejeu différé** : détecter automatiquement les fichiers `LORA_*.txt` dans `tracks/gps/` et les proposer à l'ouverture
 
@@ -114,24 +94,9 @@
 
 ## Qualité du code
 
-- ~~**Supprimer la duplication du parseur NMEA**~~ ✅ Implémenté — `gps_map.py` importe `nmea_to_decimal`, `haversine_m`, `parse_time_s`, `_smooth`, `parse_gpgga` et `load_points` depuis `gps_nmea.py` au lieu de les réécrire
-- ~~**Regrouper les fonctions de formatage**~~ ✅ Implémenté — `_fmt_dist`/`_fmt_elapsed` déplacées dans `gps_nmea.py`, réexportées par `map_canvas.py` pour `view_3d.py`
-- ~~**Factoriser la réception LoRa**~~ ✅ Implémenté — nouveau module `lora_common.py` (`detect_port`, `detect_serial_ports`, `default_lora_output_path`) partagé par `lora_receiver.py`, `lora_thread.py` et `dialogs.py`
-- **Découper les gros fichiers** — partiellement fait :
-  - ~~`map_canvas.py`~~ ✅ l'infrastructure de tuiles (`_TileCache`, `_TileWorker`, `_ContourWorker`, `_douglas_peucker_mask`, cache disque) est extraite dans `map_tiles.py` (2 202 → 2 007 lignes)
-  - ~~`gps_viewer.py`~~ ✅ la persistance (préférences, mise en page, fichiers récents, dernier parcours) est extraite dans `app_config.py` via `PersistenceMixin` (1 725 → 1 602 lignes)
-  - Reste à faire : les menus et les outils de la carte (mesure, photos, notes) dans `MapCanvas`/`MainWindow` restent volumineux
-- ~~**Tests automatisés**~~ ✅ Implémenté — `tests/test_gps_nmea.py`, 33 tests `pytest` : checksum, parseur NMEA, distance/projection, lissage, formatage, modèle `GPSData` (`requirements-dev.txt`) ; reste à couvrir : le reste de l'application (Qt/matplotlib) n'a pas de tests
+- **Découper les gros fichiers** : les menus et les outils de la carte (mesure, photos, notes) dans `MapCanvas`/`MainWindow` restent volumineux (l'infrastructure de tuiles et la persistance en ont déjà été extraites, voir `map_tiles.py`/`app_config.py`)
+- **Étendre les tests automatisés** : `tests/test_gps_nmea.py` couvre le parseur NMEA et le modèle `GPSData` ; le reste de l'application (Qt/matplotlib) n'a pas de tests
 
 ## Documentation et packaging
 
-- ~~**`requirements.txt`**~~ ✅ Implémenté — liste les 7 dépendances ; `pip install -r requirements.txt`
-- ~~**Mettre le README à jour**~~ ✅ Implémenté — mention de `lora_thread.py`, retrait de `rf95_client/` (absent du dépôt), documentation de la création du venv ; fonctionnalité LoRa Live détaillée dans FEATURES.md et USER_GUIDE.md
-- ~~**`runLoRaReceiver.sh` et venv**~~ ✅ Implémenté — même détection `.venv/bin/python` que `runGPSLoRa.sh`
 - **Lanceur Windows** : fournir un `.bat` équivalent aux scripts shell
-
-## Nettoyage du dépôt
-
-- ~~**Retirer `GPS02_map.html` du suivi git**~~ ✅ Implémenté — `git rm --cached`, motif `*_map.html` ajouté au `.gitignore` (couvre toute sortie de `gps_map.py`, pas seulement ce fichier)
-- ~~**Supprimer `claude_task.md`**~~ ✅ Implémenté
-- ~~**Alléger la bibliothèque RadioHead embarquée**~~ ✅ Implémenté — suppression de `.travis.yml`, `.gitlab-ci.yml`, `.github/`, `.gitattributes`, `.gitignore` et de l'exemple `examples/rf95_server/` (nom identique au vrai firmware du projet, mais code générique de la bibliothèque, sans lien) ; les autres exemples RadioHead sont conservés comme référence

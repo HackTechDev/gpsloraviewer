@@ -60,6 +60,7 @@ ou renommé. Un chemin situé en dehors de `$HOME` reste enregistré en absolu.
 
 - **Plusieurs traces simultanées** : chaque fichier NMEA ajouté est affiché avec une couleur distincte (palette de 8 couleurs cycliques)
 - Filtrage automatique des trames invalides (`fix_quality = 0`)
+- **Validation du checksum NMEA** (`*XX` en fin de trame) : les trames corrompues sont rejetées silencieusement, avant même le test de validité du fix — protège notamment contre le bruit radio de la réception LoRa
 - Chaque trace affiche un marqueur de **départ** (cercle) et d'**arrivée** (carré) dans sa couleur
 - La légende indique le nom de chaque fichier
 
@@ -145,6 +146,7 @@ Visible en bas de la carte dès qu'une trace GPS est chargée :
 | ▶ / ⏸ | Lecture / pause |
 | Compteur | Index du point courant / total |
 | × 1 / × 2 / × 5 / × 10 | Vitesse de lecture |
+| **Scrubber** | Glissière pleine largeur sous les contrôles — clic ou glisser pour se positionner librement ; suspend la lecture en cours et la reprend au relâchement |
 
 - **Pan automatique** : si le curseur sort de la zone visible (ou de la marge configurée), la carte se recentre automatiquement en conservant le niveau de zoom.
 - L'émission du signal `playback_index_changed` synchronise le curseur des graphiques et le panneau statistiques en temps réel.
@@ -212,7 +214,7 @@ La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent égalem
 
 - Bouton bascule `📡 LoRa Live` dans la barre d'outils : démarre / arrête la réception GPS en direct via un récepteur LoRa branché en USB, sans passer par un fichier intermédiaire
 - Boîte de dialogue de connexion : port série (détection automatique `/dev/ttyUSB*` / `/dev/ttyACM*`, saisie manuelle possible) et vitesse (9600 à 115 200 bauds)
-- Trames reconnues : `$GPGGA`/`$GNGGA` et `$GPRMC`/`$GNRMC`
+- Trames reconnues : `$GPGGA`/`$GNGGA` et `$GPRMC`/`$GNRMC`, checksum vérifié avant écriture sur disque
 - **Panneau Log LoRa Live** (sous les graphiques) : historique des 500 dernières positions reçues (heure, latitude, longitude, altitude, satellites, HDOP), bouton **Vider**
 - La trace s'affiche en direct sur la carte à mesure des réceptions ; graphiques et statistiques se rafraîchissent toutes les 3 s
 - Chaque position reçue est enregistrée dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
@@ -356,7 +358,7 @@ Les préférences sont persistées dans `~/.config/gps_viewer/settings.json`.
 - Lit le port série de l'Arduino récepteur (115 200 baud) via **pyserial**
 - Détecte automatiquement le port `/dev/ttyUSB*` ou `/dev/ttyACM*`
 - Affiche toutes les lignes en temps réel (trames NMEA + diagnostics RSSI `#`)
-- Écrit toute trame NMEA (`$...`) dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt` (en pratique `$GPRMC`, seule trame transmise par le firmware terrain)
+- Écrit toute trame NMEA (`$...`) au checksum valide dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt` (en pratique `$GPRMC`, seule trame transmise par le firmware terrain) ; affiche le nombre de trames rejetées à l'arrêt
 - `flush()` à chaque trame — le fichier est lisible en direct dans GPS Viewer
 - Ctrl+C arrête proprement et affiche le nombre de trames enregistrées
 - Dépendance : `pip install pyserial`
