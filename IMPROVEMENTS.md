@@ -122,7 +122,7 @@
 
 ## Documentation et packaging
 
-- **`requirements.txt`** : lister les dépendances (PyQt5, matplotlib, contextily, numpy, Pillow, folium, pyserial) pour une installation reproductible dans un venv
+- ~~**`requirements.txt`**~~ ✅ Implémenté — liste les 7 dépendances ; `pip install -r requirements.txt`
 - ~~**Mettre le README à jour**~~ ✅ Implémenté — mention de `lora_thread.py`, retrait de `rf95_client/` (absent du dépôt), documentation de la création du venv ; fonctionnalité LoRa Live détaillée dans FEATURES.md et USER_GUIDE.md
 - **`runLoRaReceiver.sh` et venv** : appliquer le même choix de `.venv/bin/python` que `runGPSLoRa.sh`
 - **Lanceur Windows** : fournir un `.bat` équivalent aux scripts shell

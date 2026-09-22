@@ -30,6 +30,7 @@ gpsloraviewer/
 ├── exemples/                      # Exemples de sketches Arduino
 ├── runGPSLoRa.sh                  # Lanceur de l'application (utilise .venv/ s'il existe)
 ├── runLoRaReceiver.sh             # Lanceur du récepteur LoRa en ligne de commande
+├── requirements.txt               # Dépendances Python
 ├── FEATURES.md                    # Description détaillée des fonctionnalités
 ├── IMPROVEMENTS.md                # Pistes d'amélioration
 ├── TUTORIAL.md                    # Didacticiel pas à pas
@@ -53,11 +54,11 @@ python3 gps_viewer/gps_viewer.py session.json
 ```bash
 # Dans un environnement virtuel (recommandé) :
 python3 -m venv .venv
-.venv/bin/pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
+.venv/bin/pip install -r requirements.txt
 # runGPSLoRa.sh détecte automatiquement .venv/ s'il existe.
 
 # Ou directement sur le système :
-pip install PyQt5 matplotlib contextily numpy Pillow folium pyserial
+pip install -r requirements.txt
 ```
 
 ---

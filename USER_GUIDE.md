@@ -539,7 +539,8 @@ gpsloraviewer/
 ├── gps_lora_logger/       # Firmware Arduino émetteur terrain + récepteur base
 │   └── rf95_server/       # Firmware Arduino récepteur base LoRa
 ├── runGPSLoRa.sh          # Lanceur de l'application (racine du projet)
-└── runLoRaReceiver.sh     # Lanceur du récepteur LoRa en ligne de commande
+├── runLoRaReceiver.sh     # Lanceur du récepteur LoRa en ligne de commande
+└── requirements.txt       # Dépendances Python
 ```
 
 ---
