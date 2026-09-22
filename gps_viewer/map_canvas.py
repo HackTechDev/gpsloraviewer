@@ -168,7 +168,12 @@ class _TileWorker(QThread):
                            source=self._source,
                            zoom=self._zoom,
                            attribution_size=0,
-                           headers=self._headers or None)
+                           headers=self._headers or None,
+                           # (connect, read) par tuile — évite un blocage
+                           # indéfini si le serveur ne répond pas ; le
+                           # timeout HTTP ne couvre pas une résolution DNS
+                           # bloquée, d'où le garde-fou _tile_watchdog côté UI.
+                           timeout=(5, 10))
             if self._cancelled:
                 return
             if tmp_ax.images:
@@ -335,6 +340,12 @@ class MapCanvas(FigureCanvas):
         # ── Timer rechargement tuiles (débounce 450 ms) ─────────────
         self._tile_timer = QTimer(singleShot=True, interval=450)
         self._tile_timer.timeout.connect(self._reload_tiles)
+
+        # ── Garde-fou : signale un chargement de tuiles trop long ───
+        # (ex. réseau indisponible) au lieu de laisser « Chargement… »
+        # affiché indéfiniment si le serveur ne répond jamais.
+        self._tile_watchdog = QTimer(self, singleShot=True, interval=20_000)
+        self._tile_watchdog.timeout.connect(self._on_tile_timeout)
 
         # ── Timer courbes de niveau (débounce 900 ms) ────────────────
         self._contour_timer = QTimer(singleShot=True, interval=900)
@@ -645,6 +656,7 @@ class MapCanvas(FigureCanvas):
         self._tile_worker.tiles_ready.connect(self._on_tiles_ready)
         self._tile_worker.failed.connect(self._on_tiles_failed)
         self._tile_worker.start()
+        self._tile_watchdog.start()   # relance le délai de garde à chaque requête
 
     def _apply_tiles(self, img, ext):
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
@@ -657,6 +669,7 @@ class MapCanvas(FigureCanvas):
         self.draw_idle()
 
     def _on_tiles_ready(self, img, ext, key):
+        self._tile_watchdog.stop()
         if key != self._pending_key:
             return
         self._tile_cache.put(key, (img, ext))
@@ -668,6 +681,7 @@ class MapCanvas(FigureCanvas):
             self._draw_grid()
 
     def _on_tiles_failed(self, msg: str):
+        self._tile_watchdog.stop()
         self._hide_loading()
         self.tile_loading.emit(False)
         self.ax.set_facecolor('#d9e8f5')
@@ -678,6 +692,20 @@ class MapCanvas(FigureCanvas):
         self.ax.set_xlim(xl)
         self.ax.set_ylim(yl)
         self.draw_idle()
+
+    def _on_tile_timeout(self):
+        """Le téléchargement des tuiles dépasse le délai de garde (20 s).
+
+        Le thread réseau (_TileWorker) peut rester bloqué indéfiniment côté
+        système (résolution DNS notamment, non bornée par le timeout HTTP) ;
+        on ne peut pas l'interrompre de force, mais on informe l'utilisateur
+        au lieu de laisser « Chargement des tuiles… » affiché sans fin. Un
+        résultat tardif du worker sera ignoré (clé périmée) ou, s'il arrive
+        pour la vue toujours active, appliqué normalement.
+        """
+        if self._tile_worker is not None and self._tile_worker.isRunning():
+            self._tile_worker.cancel()
+        self._on_tiles_failed('délai dépassé — vérifier la connexion réseau')
 
     def _show_loading(self):
         if self._loading_text is None:
