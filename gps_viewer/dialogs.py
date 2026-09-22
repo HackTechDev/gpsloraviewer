@@ -3,11 +3,12 @@ dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog,
              SettingsDialog, NoteDialog, LoraConnectDialog
 """
 
-import glob
 from pathlib import Path
 from PIL import Image as PilImage
 
 import numpy as np
+
+from lora_common import detect_serial_ports
 
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit,
@@ -605,8 +606,7 @@ class LoraConnectDialog(QDialog):
         form.setSpacing(10)
 
         # ── Port série ───────────────────────────────────────────────
-        candidates = sorted(
-            glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*'))
+        candidates = detect_serial_ports()
 
         self._port_combo = QComboBox()
         self._port_combo.setEditable(True)

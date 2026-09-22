@@ -4,22 +4,12 @@ lora_thread.py — QThread de réception GPS série (LoRa / NMEA)
              et sauvegarde toutes les trames NMEA dans un fichier.
 """
 
-from datetime import datetime
 from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from gps_nmea import parse_gpgga, parse_gprmc, verify_checksum
-
-BAUD_RATE_DEFAULT = 115_200
-
-
-def default_lora_output_path() -> Path:
-    """Génère un chemin horodaté dans tracks/gps/."""
-    tracks_dir = Path(__file__).parent / 'tracks' / 'gps'
-    tracks_dir.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    return tracks_dir / f'LORA_{ts}.txt'
+from lora_common import default_lora_output_path, BAUD_RATE_DEFAULT  # noqa: F401 — réexporté
 
 
 class LoraThread(QThread):

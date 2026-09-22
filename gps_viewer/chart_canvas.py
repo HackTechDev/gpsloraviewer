@@ -10,20 +10,12 @@ from matplotlib.figure import Figure
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import QSizePolicy
 
+from gps_nmea import _fmt_dist, _fmt_elapsed
+
 # ── Couleurs locales ─────────────────────────────────────────────────
 C_ALT    = '#1a6fbf'
 C_SPD    = '#27ae60'
 C_CURSOR = '#e74c3c'
-
-
-def _fmt_dist(d: float) -> str:
-    return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
-
-
-def _fmt_elapsed(s: float) -> str:
-    m = int(s // 60)
-    h = m // 60
-    return f'{h}h {m % 60:02d}min' if h else f'{m} min'
 
 
 # ══════════════════════════════════════════════════════════════════════

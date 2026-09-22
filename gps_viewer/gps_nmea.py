@@ -145,6 +145,18 @@ def load_points(filepath: str) -> list:
     return pts
 
 
+def _fmt_dist(d: float) -> str:
+    """Formate une distance : km si ≥ 1 000 m, sinon mètres."""
+    return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
+
+
+def _fmt_elapsed(s: float) -> str:
+    """Formate un temps écoulé en secondes → 'Xh YYmin' ou 'Ymin'."""
+    m = int(s // 60)
+    h = m // 60
+    return f'{h}h {m % 60:02d}min' if h else f'{m} min'
+
+
 def to_webmerc(lat: float, lon: float):
     x = math.radians(lon) * WEB_MERC_R
     y = math.log(math.tan(math.radians(lat)/2 + math.pi/4)) * WEB_MERC_R

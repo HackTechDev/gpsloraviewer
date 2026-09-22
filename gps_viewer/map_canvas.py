@@ -26,7 +26,8 @@ from PyQt5.QtWidgets import (QSizePolicy, QApplication,
                               QWidget, QHBoxLayout, QVBoxLayout, QPushButton,
                               QLabel, QComboBox, QSlider)
 
-from gps_nmea import GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R, parse_time_s
+from gps_nmea import (GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R,
+                       parse_time_s, _fmt_dist, _fmt_elapsed)  # noqa: F401 — réexportés
 
 # ── Threads réseau annulés mais encore actifs ──────────────────────────
 # cancel() est coopératif : il ne peut pas interrompre un appel réseau déjà
@@ -52,18 +53,6 @@ def _retire_thread(thread) -> None:
 _TILE_CACHE_DIR = Path.home() / '.cache' / 'gps_viewer' / 'tiles'
 _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 cx.set_cache_dir(str(_TILE_CACHE_DIR))
-
-
-def _fmt_dist(d: float) -> str:
-    """Formate une distance : km si ≥ 1 000 m, sinon mètres."""
-    return f'{d / 1000:.1f} km' if d >= 1000 else f'{d:.0f} m'
-
-
-def _fmt_elapsed(s: float) -> str:
-    """Formate un temps écoulé en secondes → 'Xh YYmin' ou 'Ymin'."""
-    m = int(s // 60)
-    h = m // 60
-    return f'{h}h {m % 60:02d}min' if h else f'{m} min'
 
 
 def _cache_size_mb() -> float:

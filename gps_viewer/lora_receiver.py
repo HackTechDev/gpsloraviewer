@@ -12,9 +12,7 @@ Dépendance : pip install pyserial
 """
 
 import sys
-import glob
 import argparse
-from datetime import datetime
 from pathlib import Path
 
 try:
@@ -25,23 +23,9 @@ except ImportError:
     sys.exit(1)
 
 from gps_nmea import verify_checksum
+from lora_common import detect_port, default_lora_output_path, BAUD_RATE_DEFAULT
 
-
-BAUD_RATE = 115200
-
-
-def detect_port():
-    """Retourne le premier port USB série disponible, ou None."""
-    candidates = sorted(glob.glob('/dev/ttyUSB*') + glob.glob('/dev/ttyACM*'))
-    return candidates[0] if candidates else None
-
-
-def default_output_path():
-    """Génère un chemin de sortie horodaté dans tracks/gps/."""
-    tracks_dir = Path(__file__).parent / 'tracks' / 'gps'
-    tracks_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    return tracks_dir / f'LORA_{timestamp}.txt'
+BAUD_RATE = BAUD_RATE_DEFAULT
 
 
 def main():
@@ -60,7 +44,7 @@ def main():
         print("  Branchez l'Arduino récepteur et relancez, ou précisez --port /dev/ttyUSBx")
         sys.exit(1)
 
-    out_path = Path(args.output) if args.output else default_output_path()
+    out_path = Path(args.output) if args.output else default_lora_output_path()
 
     print(f"Port    : {port} @ {BAUD_RATE} baud")
     print(f"Fichier : {out_path}")

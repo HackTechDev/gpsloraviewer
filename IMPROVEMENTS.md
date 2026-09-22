@@ -114,9 +114,9 @@
 
 ## Qualité du code
 
-- **Supprimer la duplication du parseur NMEA** : `gps_map.py` réécrit `nmea_to_decimal`, `haversine_m`, `parse_time_s`, `_smooth` et `parse_gpgga`, déjà présents dans `gps_nmea.py` — les importer à la place
-- **Regrouper les fonctions de formatage** : `_fmt_dist` et `_fmt_elapsed` sont copiées dans `chart_canvas.py` et `map_canvas.py` — les placer dans un module commun
-- **Factoriser la réception LoRa** : `lora_receiver.py` (ligne de commande) et `lora_thread.py` (interface) partagent la détection de port, l'écriture du fichier et le filtrage des trames
+- ~~**Supprimer la duplication du parseur NMEA**~~ ✅ Implémenté — `gps_map.py` importe `nmea_to_decimal`, `haversine_m`, `parse_time_s`, `_smooth`, `parse_gpgga` et `load_points` depuis `gps_nmea.py` au lieu de les réécrire
+- ~~**Regrouper les fonctions de formatage**~~ ✅ Implémenté — `_fmt_dist`/`_fmt_elapsed` déplacées dans `gps_nmea.py`, réexportées par `map_canvas.py` pour `view_3d.py`
+- ~~**Factoriser la réception LoRa**~~ ✅ Implémenté — nouveau module `lora_common.py` (`detect_port`, `detect_serial_ports`, `default_lora_output_path`) partagé par `lora_receiver.py`, `lora_thread.py` et `dialogs.py`
 - **Découper les gros fichiers** : `map_canvas.py` (~2 100 lignes) et `gps_viewer.py` (~1 600 lignes, dont une classe `MainWindow` d'environ 1 470 lignes) — extraire la gestion des fichiers/sessions, les menus et les outils de la carte (mesure, photos, notes)
 - **Tests automatisés** : aucun test actuellement — commencer par `pytest` sur le parseur NMEA, la projection Web Mercator, la distance et le lissage (testables sans interface)
 
