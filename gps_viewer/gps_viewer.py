@@ -526,8 +526,13 @@ class MainWindow(QMainWindow):
 
     def dropEvent(self, event):
         urls = event.mimeData().urls()
-        if urls:
-            self._load(urls[0].toLocalFile())
+        if not urls:
+            return
+        path = Path(urls[0].toLocalFile())
+        if path.suffix.lower() == '.json':
+            self._apply_track_json(path)
+        else:
+            self._load(str(path))
 
     # ── Chargement ───────────────────────────────────────────────────
 
@@ -1694,7 +1699,11 @@ def main():
     splash.finish(win)
 
     if len(sys.argv) > 1:
-        win._load(sys.argv[1])
+        arg_path = Path(sys.argv[1])
+        if arg_path.suffix.lower() == '.json':
+            win._apply_track_json(arg_path)
+        else:
+            win._load(str(arg_path))
 
     sys.exit(app.exec_())
 
