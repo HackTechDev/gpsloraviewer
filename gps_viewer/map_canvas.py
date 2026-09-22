@@ -318,6 +318,7 @@ class MapCanvas(FigureCanvas):
 
         # ── Indicateur de chargement ─────────────────────────────────
         self._loading_text = None  # text artist, None si axes vidés
+        self._error_text   = None  # idem, pour « Tuiles indisponibles »
 
         # ── Mesure de distance ───────────────────────────────────────
         self._measure_mode   = False
@@ -409,6 +410,7 @@ class MapCanvas(FigureCanvas):
         self._gps = gps
         self._gps_list     = [gps]
         self._loading_text = None
+        self._error_text   = None
         self._track_artists    = []
         self._track_markers    = []
         self._track_filter_idx = None
@@ -684,7 +686,16 @@ class MapCanvas(FigureCanvas):
                        alpha=self._map_alpha)
         self.ax.set_xlim(xl)
         self.ax.set_ylim(yl)
+        self._clear_tile_error()
         self.draw_idle()
+
+    def _clear_tile_error(self):
+        """Efface le message « Tuiles indisponibles » et le fond associé,
+        laissé par une tentative précédente (source changée, réseau revenu…).
+        Sans ça, un seul échec restait affiché indéfiniment par-dessus la
+        carte même après un chargement réussi ultérieur."""
+        if self._error_text is not None:
+            self._error_text.set_visible(False)
 
     def _on_tiles_ready(self, img, ext, key):
         self._tile_watchdog.stop()
@@ -704,9 +715,15 @@ class MapCanvas(FigureCanvas):
         self.tile_loading.emit(False)
         self.ax.set_facecolor('#d9e8f5')
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
-        self.ax.text(0.5, 0.02, f'Tuiles indisponibles : {msg}',
-                     transform=self.ax.transAxes, ha='center',
-                     fontsize=8, color='#c00', zorder=20)
+        text = f'Tuiles indisponibles : {msg}'
+        if self._error_text is None:
+            self._error_text = self.ax.text(
+                0.5, 0.02, text,
+                transform=self.ax.transAxes, ha='center',
+                fontsize=8, color='#c00', zorder=20)
+        else:
+            self._error_text.set_text(text)
+            self._error_text.set_visible(True)
         self.ax.set_xlim(xl)
         self.ax.set_ylim(yl)
         self.draw_idle()
@@ -726,6 +743,7 @@ class MapCanvas(FigureCanvas):
         self._on_tiles_failed('délai dépassé — vérifier la connexion réseau')
 
     def _show_loading(self):
+        self._clear_tile_error()   # une nouvelle tentative efface l'ancienne erreur
         if self._loading_text is None:
             self._loading_text = self.ax.text(
                 0.5, 0.02, 'Chargement des tuiles…',
@@ -1013,6 +1031,7 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot       = None
         self._cursor_annot     = None
         self._loading_text     = None
+        self._error_text       = None
         self._track_artists    = []
         self._track_markers    = []
         self._track_filter_idx = None
@@ -1059,6 +1078,7 @@ class MapCanvas(FigureCanvas):
         ylim = (ymin - mg, ymax + mg)
 
         self._loading_text     = None
+        self._error_text       = None
         self._gps              = None
         self._gps_list         = []
         self._cursor_dot       = None
@@ -1191,6 +1211,7 @@ class MapCanvas(FigureCanvas):
         self._cursor_dot    = None
         self._cursor_annot  = None
         self._loading_text  = None
+        self._error_text    = None
         self._live_line     = None
         self._live_dot      = None
         self._live_xs       = []
@@ -2152,6 +2173,7 @@ class MapCanvas(FigureCanvas):
         self.ax.set_xlim(xlim)
         self.ax.set_ylim(ylim)
         self._loading_text = None
+        self._error_text   = None
         self._cursor_dot   = None
         self._cursor_annot = None
 
