@@ -31,9 +31,11 @@ gpsloraviewer/
 │   └── lib/
 │       └── Grove_LoRa_Radio/      #   Bibliothèque RadioHead patchée (AVR fix)
 ├── exemples/                      # Exemples de sketches Arduino
+├── tests/                         # Suite pytest (parseur NMEA, géométrie, formatage)
 ├── runGPSLoRa.sh                  # Lanceur de l'application (utilise .venv/ s'il existe)
 ├── runLoRaReceiver.sh             # Lanceur du récepteur LoRa en ligne de commande
 ├── requirements.txt               # Dépendances Python
+├── requirements-dev.txt           # + pytest, pour lancer les tests
 ├── FEATURES.md                    # Description détaillée des fonctionnalités
 ├── IMPROVEMENTS.md                # Pistes d'amélioration
 ├── TUTORIAL.md                    # Didacticiel pas à pas
@@ -62,6 +64,16 @@ python3 -m venv .venv
 
 # Ou directement sur le système :
 pip install -r requirements.txt
+```
+
+### Tests
+
+Suite `pytest` sur les parties testables sans interface (parseur NMEA,
+checksum, géométrie, formatage, modèle `GPSData`) :
+
+```bash
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/python -m pytest tests/
 ```
 
 ---

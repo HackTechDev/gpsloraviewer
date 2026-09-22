@@ -121,7 +121,7 @@
   - ~~`map_canvas.py`~~ ✅ l'infrastructure de tuiles (`_TileCache`, `_TileWorker`, `_ContourWorker`, `_douglas_peucker_mask`, cache disque) est extraite dans `map_tiles.py` (2 202 → 2 007 lignes)
   - ~~`gps_viewer.py`~~ ✅ la persistance (préférences, mise en page, fichiers récents, dernier parcours) est extraite dans `app_config.py` via `PersistenceMixin` (1 725 → 1 602 lignes)
   - Reste à faire : les menus et les outils de la carte (mesure, photos, notes) dans `MapCanvas`/`MainWindow` restent volumineux
-- **Tests automatisés** : aucun test actuellement — commencer par `pytest` sur le parseur NMEA, la projection Web Mercator, la distance et le lissage (testables sans interface)
+- ~~**Tests automatisés**~~ ✅ Implémenté — `tests/test_gps_nmea.py`, 33 tests `pytest` : checksum, parseur NMEA, distance/projection, lissage, formatage, modèle `GPSData` (`requirements-dev.txt`) ; reste à couvrir : le reste de l'application (Qt/matplotlib) n'a pas de tests
 
 ## Documentation et packaging
 
