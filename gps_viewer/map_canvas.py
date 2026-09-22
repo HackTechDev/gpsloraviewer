@@ -261,7 +261,9 @@ class MapCanvas(FigureCanvas):
         self._gps_list: list      = []
         self._default_lim = None   # (xlim, ylim) pour reset
         self._tile_source   = cx.providers.OpenStreetMap.Mapnik
-        self._tile_headers  = {}   # headers HTTP pour la source active
+        # OSM bloque le User-Agent aléatoire par défaut de contextily
+        # ('contextily-<uuid>') — voir _TILE_SOURCES dans gps_viewer.py.
+        self._tile_headers  = {'User-Agent': 'GPS-Viewer/1.0'}
 
         # ── Cache LRU en mémoire ─────────────────────────────────────
         self._tile_cache  = _TileCache(maxsize=20)

@@ -896,7 +896,12 @@ class MainWindow(QMainWindow):
             'source': cx.providers.OpenStreetMap.Mapnik,
             'label':  '🗺  OpenStreetMap',
             'short':  'OSM',
-            'headers': {},
+            # OSM bloque le User-Agent aléatoire par défaut de contextily
+            # ('contextily-<uuid>'), trop utilisé par des scripts qui ne
+            # respectent pas sa politique d'usage des tuiles (exige un
+            # User-Agent identifiant l'application) :
+            # https://operations.osmfoundation.org/policies/tiles/
+            'headers': {'User-Agent': 'GPS-Viewer/1.0'},
         },
         'esri': {
             'source': cx.providers.Esri.WorldImagery,
