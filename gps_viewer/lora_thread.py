@@ -9,7 +9,7 @@ from pathlib import Path
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from gps_nmea import parse_gpgga, parse_gprmc
+from gps_nmea import parse_gpgga, parse_gprmc, verify_checksum
 
 BAUD_RATE_DEFAULT = 115_200
 
@@ -66,8 +66,9 @@ class LoraThread(QThread):
 
                     line = raw.decode('ascii', errors='replace').rstrip()
 
-                    # Toutes les trames NMEA sont sauvegardées
-                    if line.startswith('$'):
+                    # Toutes les trames NMEA au checksum valide sont
+                    # sauvegardées (rejette le bruit radio de la liaison LoRa)
+                    if line.startswith('$') and verify_checksum(line):
                         f.write(line + '\r\n')
                         f.flush()
 

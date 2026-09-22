@@ -18,6 +18,28 @@ WEB_MERC_R = 6_378_137.0
 #  Utilitaires GPS
 # ══════════════════════════════════════════════════════════════════════
 
+def verify_checksum(line: str) -> bool:
+    """Vérifie le checksum NMEA en fin de trame (XOR entre '$' et '*').
+
+    Retourne False si le checksum est absent, mal formé, ou ne correspond
+    pas à la valeur calculée — ce qui permet de rejeter silencieusement les
+    trames corrompues (bruit radio en particulier avec la réception LoRa).
+    """
+    line = line.strip()
+    if not line.startswith('$'):
+        return False
+    star = line.find('*')
+    if star == -1 or star + 3 > len(line):
+        return False
+    checksum = 0
+    for ch in line[1:star]:
+        checksum ^= ord(ch)
+    try:
+        return checksum == int(line[star + 1:star + 3], 16)
+    except ValueError:
+        return False
+
+
 def nmea_to_decimal(coord: str, direction: str) -> float:
     dot = coord.index('.')
     deg = int(coord[:dot - 2])
@@ -55,7 +77,10 @@ def _smooth(data: list, window: int = 5) -> list:
 
 
 def parse_gprmc(line: str):
-    """Parse une trame $GPRMC ou $GNRMC. Retourne None si fix invalide."""
+    """Parse une trame $GPRMC ou $GNRMC. Retourne None si fix invalide
+    ou si le checksum ne correspond pas (trame corrompue)."""
+    if not verify_checksum(line):
+        return None
     parts = line.strip().split(',')
     if len(parts) < 7:
         return None
@@ -77,6 +102,10 @@ def parse_gprmc(line: str):
 
 
 def parse_gpgga(line: str):
+    """Parse une trame $GPGGA ou $GNGGA. Retourne None si fix invalide
+    ou si le checksum ne correspond pas (trame corrompue)."""
+    if not verify_checksum(line):
+        return None
     parts = line.strip().split(',')
     if len(parts) < 10:
         return None

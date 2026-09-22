@@ -4,7 +4,7 @@
 
 - **Export GPX / KML / GeoJSON** : permettre d'exporter la trace dans des formats standards utilisables dans d'autres outils (QGIS, Google Earth, Garmin, etc.)
 - **Import GPX** : lire directement les fichiers GPX produits par des appareils GPS commerciaux, en plus du format NMEA brut
-- **Validation checksum NMEA** : vérifier le checksum en fin de trame (`*XX`) pour rejeter silencieusement les trames corrompues — actuellement aucun contrôle d'intégrité
+- ~~**Validation checksum NMEA**~~ ✅ Implémenté — `gps_nmea.verify_checksum()` (XOR entre `$` et `*`), utilisé par `parse_gprmc`/`parse_gpgga` : rejette les trames corrompues
 - **Filtrage HDOP** : rejeter automatiquement les points dont le HDOP dépasse un seuil configurable (ex : 5.0) pour améliorer la qualité des traces
 - **Segmentation automatique** : détecter les pauses (vitesse nulle prolongée) et découper la trace en segments distincts avec des statistiques par segment
 - **Détection de sauts GPS** : alerter si deux points consécutifs sont espacés de plus de 100 m sans cohérence temporelle (satellite perdu, redémarrage)
@@ -96,7 +96,7 @@
 ## Récepteur LoRa / Intégration PC
 
 - ~~**Script de réception PC**~~ ✅ Implémenté — `lora_receiver.py` lit le port série, écrit les trames NMEA dans `tracks/gps/LORA_*.txt`, lisible dans GPS Viewer. Lanceur `runLoRaReceiver.sh` fourni.
-- **Validation checksum dans lora_receiver.py et lora_thread.py** : vérifier le checksum NMEA avant d'écrire dans le fichier pour rejeter les trames corrompues par la liaison LoRa (à implémenter une seule fois dans `gps_nmea.py`, voir « Qualité du code »)
+- ~~**Validation checksum dans lora_receiver.py et lora_thread.py**~~ ✅ Implémenté — les deux réutilisent `gps_nmea.verify_checksum()` avant d'écrire une trame sur disque
 - **Reconnexion automatique** : si le port série est déconnecté (Arduino débranché), tenter de se reconnecter périodiquement au lieu de planter
 - **Baud rate configurable** : option `--baud` pour `lora_receiver.py` (actuellement 115200 codé en dur)
 - **Affichage RSSI dans le terminal** : reformater les lignes `#` pour afficher le signal de façon plus lisible (ex : `[12] RSSI: -87 dBm`)

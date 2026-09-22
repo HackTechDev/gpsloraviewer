@@ -24,6 +24,8 @@ except ImportError:
     print("  pip install pyserial")
     sys.exit(1)
 
+from gps_nmea import verify_checksum
+
 
 BAUD_RATE = 115200
 
@@ -65,6 +67,7 @@ def main():
     print("En attente de trames NMEA... (Ctrl+C pour arrêter)\n")
 
     nmea_count = 0
+    rejected_count = 0
 
     try:
         with serial.Serial(port, BAUD_RATE, timeout=1) as ser, \
@@ -81,16 +84,23 @@ def main():
                 print(line)
 
                 # Écriture dans le fichier uniquement pour les trames NMEA
+                # au checksum valide (rejette les trames corrompues par le
+                # bruit radio de la liaison LoRa)
                 if line.startswith('$'):
-                    f.write(line + '\r\n')
-                    f.flush()
-                    nmea_count += 1
+                    if verify_checksum(line):
+                        f.write(line + '\r\n')
+                        f.flush()
+                        nmea_count += 1
+                    else:
+                        rejected_count += 1
 
     except serial.SerialException as e:
         print(f"\nErreur port série : {e}")
         sys.exit(1)
     except KeyboardInterrupt:
-        print(f"\nArrêt — {nmea_count} trames NMEA enregistrées dans {out_path}")
+        print(f"\nArrêt — {nmea_count} trames NMEA enregistrées dans {out_path}"
+              + (f"  ({rejected_count} rejetée(s), checksum invalide)"
+                 if rejected_count else ""))
 
 
 if __name__ == '__main__':
