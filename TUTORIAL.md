@@ -43,7 +43,7 @@ annotations. Commencez toujours par en créer un.
 
 ## Étape 3 — Charger une trace GPS
 
-1. Menu **Fichier → Ajouter une trace GPS…** (`Ctrl+O`), ou bouton **📂 Trace GPS**
+1. Menu **Fichier → Ajouter une trace GPS…** (`Ctrl+O`), ou bouton **☰ Trace GPS**
    dans la barre d'outils.
 2. Naviguez jusqu'à `gps_viewer/tracks/gps/` et sélectionnez **GPS08.txt**.
 3. Cliquez **Ouvrir**.
@@ -74,13 +74,13 @@ Essayez de zoomer sur le point de départ de la trace (marqueur **●**), puis r
 
 ### Changer le fond de carte
 
-Cliquez sur **🗺 Fond de carte** dans la barre d'outils et choisissez
+Cliquez sur **▦ Fond de carte** dans la barre d'outils et choisissez
 **Orthophoto IGN** pour voir les photographies aériennes sous la trace.
 Revenez à **OpenStreetMap** ensuite.
 
 ### Changer la coloration de la trace
 
-Cliquez sur **🎨 Trace** et sélectionnez **⚡ Vitesse**.
+Cliquez sur **◆ Trace** et sélectionnez **⚡ Vitesse**.
 La trace passe d'une couleur unie à un dégradé vert → orange → rouge qui
 révèle où vous étiez le plus rapide. Une **colorbar** apparaît en incrustation.
 
@@ -117,7 +117,7 @@ La barre de lecture en bas de la carte permet de *rejouer* le parcours automatiq
 
 1. Cliquez sur **▶** (ou laissez la trace telle quelle — la lecture commence au début).
 2. Le point rouge avance sur la trace, les graphiques suivent en temps réel.
-3. Cliquez sur **⏸** pour mettre en pause.
+3. Cliquez sur **‖** pour mettre en pause.
 
 ### Changer la vitesse
 
@@ -139,7 +139,7 @@ La barre de progression sous les boutons représente la totalité de la trace.
 
 ### Retour au début
 
-Cliquez sur **⏮** pour revenir au point de départ.
+Cliquez sur **«** pour revenir au point de départ.
 
 ---
 
@@ -147,7 +147,7 @@ Cliquez sur **⏮** pour revenir au point de départ.
 
 Les annotations photo permettent de géolocaliser vos images directement sur la trace.
 
-1. Cliquez sur le bouton **📷 Photo** dans la barre d'outils (ou appuyez sur `P`).
+1. Cliquez sur le bouton **◇ Photo** dans la barre d'outils (ou appuyez sur `P`).
    Le curseur de la carte prend la forme d'une **croix**.
 2. Cliquez à un endroit intéressant sur la trace (par exemple, près du sommet du profil
    altimétrique).
@@ -165,7 +165,7 @@ Cliquez sur la croix rouge ou la miniature : la **visionneuse** s'ouvre avec :
 - des champs **Titre** et **Description** — saisissez un titre, par exemple
   `Vue du sommet`, puis cliquez **Enregistrer**.
 
-Appuyez sur `P` ou re-cliquez **📷 Photo** pour quitter le mode photo.
+Appuyez sur `P` ou re-cliquez **◇ Photo** pour quitter le mode photo.
 
 ---
 
@@ -173,7 +173,7 @@ Appuyez sur `P` ou re-cliquez **📷 Photo** pour quitter le mode photo.
 
 Les notes permettent d'associer un texte libre à n'importe quel point de la carte.
 
-1. Cliquez sur **📝 Note** dans la barre d'outils (ou appuyez sur `N`).
+1. Cliquez sur **✎ Note** dans la barre d'outils (ou appuyez sur `N`).
 2. Cliquez sur la carte à l'endroit de votre choix.
 3. La boîte de dialogue s'ouvre :
    - **Titre** : saisissez `Départ de randonnée`
@@ -241,13 +241,13 @@ Glissez le **scrubber** pour sauter directement à un passage intéressant.
 ### Modes de coloration
 
 Changez le mode de coloration en haut de la fenêtre :
-- **🏔 Altitude** : la trace devient un dégradé de couleur selon l'altitude — les zones
+- **▲ Altitude** : la trace devient un dégradé de couleur selon l'altitude — les zones
   hautes ressortent clairement.
 - **⚡ Vitesse** : identifiez visuellement les portions rapides et les montées lentes.
 
 ### Courbes de niveau SRTM
 
-Cliquez sur **🏔 Courbes** : l'application télécharge les données d'altitude SRTM et
+Cliquez sur **▲ Courbes** : l'application télécharge les données d'altitude SRTM et
 trace les courbes de niveau dans l'espace 3D. Le premier chargement prend quelques
 secondes ; les données sont ensuite mises en cache.
 
@@ -260,7 +260,7 @@ Vous avez parcouru les fonctionnalités essentielles. Voici quelques pistes pour
 ### Comparer deux traces
 
 1. **Fichier → Ajouter une trace GPS…** et chargez `GPS06.txt`.
-2. Le sélecteur **📊 Graphiques :** apparaît dans la barre d'outils.
+2. Le sélecteur **▧ Graphiques :** apparaît dans la barre d'outils.
 3. Choisissez **Toutes les traces GPS** pour superposer les deux profils sur les graphiques.
 4. La vue 3D affiche automatiquement les deux traces, chacune avec sa couleur.
 

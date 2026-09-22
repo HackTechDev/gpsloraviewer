@@ -66,7 +66,7 @@ ou renommé. Un chemin situé en dehors de `$HOME` reste enregistré en absolu.
 
 ### Sélecteur de trace (Graphiques)
 
-Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :** apparaît dans la barre d'outils :
+Dès que deux traces ou plus sont chargées, un sélecteur **▧ Graphiques :** apparaît dans la barre d'outils :
 
 | Choix | Effet |
 |-------|-------|
@@ -89,7 +89,7 @@ Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :**
 | Orthophoto IGN | Photographies aériennes IGN France |
 | Plan IGN | Cartographie topographique IGN France |
 
-Changement via le bouton `🗺 Fond de carte` dans la barre d'outils.
+Changement via le bouton `▦ Fond de carte` dans la barre d'outils.
 
 Le chargement des tuiles est asynchrone (`QThread`, ne bloque pas l'interface) et
 protégé par un délai de garde de 20 s : en cas de réseau indisponible ou trop lent, le
@@ -98,7 +98,7 @@ rester affiché indéfiniment.
 
 ### Coloration de la trace
 
-Sélectionnable via le bouton `🎨 Trace` :
+Sélectionnable via le bouton `◆ Trace` :
 
 | Mode | Description |
 |------|-------------|
@@ -142,8 +142,8 @@ Visible en bas de la carte dès qu'une trace GPS est chargée :
 
 | Contrôle | Description |
 |----------|-------------|
-| ⏮ | Retour au début |
-| ▶ / ⏸ | Lecture / pause |
+| « | Retour au début |
+| ▶ / ‖ | Lecture / pause |
 | Compteur | Index du point courant / total |
 | × 1 / × 2 / × 5 / × 10 | Vitesse de lecture |
 | **Scrubber** | Glissière pleine largeur sous les contrôles — clic ou glisser pour se positionner librement ; suspend la lecture en cours et la reprend au relâchement |
@@ -153,7 +153,7 @@ Visible en bas de la carte dès qu'une trace GPS est chargée :
 
 ## Annotations photo
 
-- **Mode photo** : bouton `📷 Photo` ou touche `P` — le curseur devient une croix
+- **Mode photo** : bouton `◇ Photo` ou touche `P` — le curseur devient une croix
 - Clic sur la carte → sélecteur de fichier image (JPG, PNG, BMP, GIF, TIFF, WebP)
 - L'image originale est copiée dans `gps_viewer/tracks/images/`, une miniature 80×80 px est générée
 - Chaque annotation affiche une croix rouge et la miniature reliée par une flèche
@@ -172,12 +172,12 @@ Visible en bas de la carte dès qu'une trace GPS est chargée :
 
 ## Annotations note
 
-- **Mode note** : bouton `📝 Note` ou touche `N` — le curseur devient une croix
+- **Mode note** : bouton `✎ Note` ou touche `N` — le curseur devient une croix
 - Clic sur la carte → boîte de dialogue avec champ **Titre** et champ **Description**
 - Chaque note s'affiche sur la carte sous forme d'un **marqueur orange** (cercle ⌀ 14 px) avec le titre affiché au-dessus dans une étiquette jaune pâle
 - **Clic sur le marqueur** → dialogue d'édition pré-rempli avec :
   - Champs Titre et Description modifiables
-  - Bouton **🗑 Supprimer** pour retirer la note
+  - Bouton **✕ Supprimer** pour retirer la note
 - Les modes Photo et Note sont **mutuellement exclusifs** : activer l'un désactive l'autre automatiquement
 - `Échap` ou re-clic sur le bouton quitte le mode note
 - Les notes sont sauvegardées dans le fichier JSON actif (clé `"notes"`) et rechargées au démarrage
@@ -212,7 +212,7 @@ La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent égalem
 
 ## Réception LoRa en temps réel (LoRa Live)
 
-- Bouton bascule `📡 LoRa Live` dans la barre d'outils : démarre / arrête la réception GPS en direct via un récepteur LoRa branché en USB, sans passer par un fichier intermédiaire
+- Bouton bascule `◎ LoRa Live` dans la barre d'outils : démarre / arrête la réception GPS en direct via un récepteur LoRa branché en USB, sans passer par un fichier intermédiaire
 - Boîte de dialogue de connexion : port série (détection automatique `/dev/ttyUSB*` / `/dev/ttyACM*`, saisie manuelle possible) et vitesse (9600 à 115 200 bauds)
 - Trames reconnues : `$GPGGA`/`$GNGGA` et `$GPRMC`/`$GNRMC`, checksum vérifié avant écriture sur disque
 - **Panneau Log LoRa Live** (sous les graphiques) : historique des 500 dernières positions reçues (heure, latitude, longitude, altitude, satellites, HDOP), bouton **Vider**
@@ -222,7 +222,7 @@ La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent égalem
 
 ## Navigation par coordonnées
 
-- Menu **Navigation → Aller aux coordonnées…** (Ctrl+G) ou bouton `📍 Coordonnées`
+- Menu **Navigation → Aller aux coordonnées…** (Ctrl+G) ou bouton `◉ Coordonnées`
 - Saisie de la latitude et longitude avec 6 décimales
 - Champ de collage rapide : coller `48.8566, 2.3522` remplit automatiquement les champs
 - Sélecteur de niveau de zoom (1 à 19)
@@ -242,12 +242,12 @@ Fenêtre indépendante (non bloquante) affichant toutes les traces GPS chargées
 | Mode | Description |
 |------|-------------|
 | Couleur unie | Couleur fixe par trace (palette cyclique) |
-| 🏔 Altitude | Gradient de couleur selon l'altitude (colorbar affichée) |
+| ▲ Altitude | Gradient de couleur selon l'altitude (colorbar affichée) |
 | ⚡ Vitesse | Gradient de couleur selon la vitesse (colorbar affichée) |
 
-- **Courbes de niveau SRTM** : bouton `🏔 Courbes` — calcule et affiche les courbes de niveau issues des données SRTM (toutes les 50 m par défaut), avec étiquettes d'altitude
+- **Courbes de niveau SRTM** : bouton `▲ Courbes` — calcule et affiche les courbes de niveau issues des données SRTM (toutes les 50 m par défaut), avec étiquettes d'altitude
 - **Fond de carte OSM** : tuiles OpenStreetMap affichées comme plan horizontal à la base de la scène, téléchargées en arrière-plan (`QThread`) sans bloquer l'interface
-  - Bouton toggle `🗺 Fond OSM` pour afficher / masquer
+  - Bouton toggle `▦ Fond OSM` pour afficher / masquer
   - **Sélecteur de résolution** : Basse (64 px / 4 096 polygones), Moyenne (128 px), Haute (256 px) — changement instantané sans re-téléchargement
   - La surface OSM est automatiquement masquée pendant la rotation pour garantir la fluidité, et réaffichée au relâchement
 - **Rotation fluide** : la caméra ne peut pas passer sous le plan horizontal (élévation clampée à ≥ 0°)
@@ -261,8 +261,8 @@ Une **barre de lecture** (fond sombre) est affichée sous le canvas 3D :
 
 | Contrôle | Description |
 |----------|-------------|
-| ⏮ | Retour au point de départ |
-| ▶ Animer / ⏸ Pause | Démarrer ou suspendre l'animation |
+| « | Retour au point de départ |
+| ▶ Animer / ‖ Pause | Démarrer ou suspendre l'animation |
 | Compteur | `point N / total  │  ↑ dist  │  ↓ dist  │  Δ temps  │  ◷ heure` |
 | × 1 / × 2 / × 5 / × 10 | Nombre de points avancés par tick de 100 ms |
 | **Scrubber** | Glissière pleine largeur pour se positionner librement |

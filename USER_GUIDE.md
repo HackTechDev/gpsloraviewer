@@ -101,7 +101,7 @@ Il est possible de **glisser-déposer** un fichier `.txt` ou `.json` directement
 
 ### Ajouter une trace
 
-**Fichier → Ajouter une trace GPS…** (`Ctrl+O`) ou bouton **📂 Trace GPS** dans la barre d'outils.
+**Fichier → Ajouter une trace GPS…** (`Ctrl+O`) ou bouton **☰ Trace GPS** dans la barre d'outils.
 
 Sélectionnez un fichier NMEA (`.txt`, `.nmea`, `.log`). La trace s'affiche immédiatement sur la carte en attendant le chargement des tuiles de fond.
 
@@ -116,7 +116,7 @@ Une **légende** apparaît en haut à gauche de la carte avec le nom de chaque f
 
 ### Sélectionner la trace analysée
 
-Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :** apparaît dans la barre d'outils :
+Dès que deux traces ou plus sont chargées, un sélecteur **▧ Graphiques :** apparaît dans la barre d'outils :
 
 | Choix | Effet sur la carte | Effet sur les graphiques |
 |-------|-------------------|--------------------------|
@@ -137,7 +137,7 @@ Dès que deux traces ou plus sont chargées, un sélecteur **📊 Graphiques :**
 
 ### Fonds de carte
 
-Le bouton **🗺 Fond de carte** dans la barre d'outils permet de choisir parmi :
+Le bouton **▦ Fond de carte** dans la barre d'outils permet de choisir parmi :
 
 | Source | Description |
 |--------|-------------|
@@ -155,12 +155,12 @@ Les tuiles téléchargées sont mises en **cache** sur le disque (`~/.cache/gps_
 
 ### Coloration de la trace
 
-Le bouton **🎨 Trace** dans la barre d'outils propose trois modes de coloration :
+Le bouton **◆ Trace** dans la barre d'outils propose trois modes de coloration :
 
 | Mode | Description |
 |------|-------------|
 | Couleur unie | Couleur fixe par trace (comportement par défaut) |
-| 🏔 Altitude | Gradient bleu → vert → jaune → rouge selon l'altitude |
+| ▲ Altitude | Gradient bleu → vert → jaune → rouge selon l'altitude |
 | ⚡ Vitesse | Gradient vert → orange → rouge selon la vitesse |
 
 ### Boîte d'informations du curseur
@@ -186,9 +186,9 @@ La barre de lecture apparaît **automatiquement** en bas de la carte dès qu'une
 
 | Élément | Description |
 |---------|-------------|
-| ⏮ | Revenir au point de départ |
-| ▶ | Démarrer la lecture (le bouton devient ⏸) |
-| ⏸ | Mettre en pause |
+| « | Revenir au point de départ |
+| ▶ | Démarrer la lecture (le bouton devient ‖) |
+| ‖ | Mettre en pause |
 | Compteur | Affiche la position courante / nombre total de points |
 | × 1 / × 2 / × 5 / × 10 | Sélectionner la vitesse de lecture |
 | **Scrubber** (barre de progression) | Cliquer ou glisser pour se positionner librement sur la trace |
@@ -229,11 +229,11 @@ Une **boîte d'annotation** flottante s'affiche sur chaque graphique avec la mê
 
 ### Mode multi-traces
 
-Quand **Toutes les traces GPS** est sélectionné dans le combo **📊 Graphiques :**, les deux graphiques superposent les profils de toutes les traces avec une légende et des couleurs distinctes. Le curseur n'est pas actif dans ce mode.
+Quand **Toutes les traces GPS** est sélectionné dans le combo **▧ Graphiques :**, les deux graphiques superposent les profils de toutes les traces avec une légende et des couleurs distinctes. Le curseur n'est pas actif dans ce mode.
 
 ### Changer la trace affichée
 
-Utilisez le sélecteur **📊 Graphiques :** dans la barre d'outils (visible avec 2+ traces) pour choisir quelle trace est analysée dans les graphiques et les statistiques.
+Utilisez le sélecteur **▧ Graphiques :** dans la barre d'outils (visible avec 2+ traces) pour choisir quelle trace est analysée dans les graphiques et les statistiques.
 
 ---
 
@@ -267,7 +267,7 @@ heure GPS, latitude, longitude, altitude, vitesse, distance cumulée, nombre de 
 
 ### Placer une photo
 
-1. Activez le **mode photo** : bouton **📷 Photo** dans la barre d'outils, ou touche `P`.
+1. Activez le **mode photo** : bouton **◇ Photo** dans la barre d'outils, ou touche `P`.
    Le curseur de la carte prend la forme d'une croix.
 2. **Cliquez** à l'endroit souhaité sur la carte.
 3. Un sélecteur de fichier s'ouvre — choisissez votre image (JPG, PNG, BMP, GIF, TIFF, WebP).
@@ -300,20 +300,20 @@ L'indicateur de direction matérialise l'angle de vue au moment de la prise de p
 
 ### Placer une note
 
-1. Activez le **mode note** : bouton **📝 Note** dans la barre d'outils, ou touche `N`.
+1. Activez le **mode note** : bouton **✎ Note** dans la barre d'outils, ou touche `N`.
    Le curseur de la carte prend la forme d'une croix.
 2. **Cliquez** à l'endroit souhaité sur la carte.
 3. Une boîte de dialogue s'ouvre — saisissez un **Titre** et une **Description** (optionnelle).
 4. Cliquez **Enregistrer** : un **marqueur orange** apparaît sur la carte avec le titre affiché au-dessus dans une étiquette jaune pâle.
 
 > Les modes Photo et Note sont **mutuellement exclusifs** : activer l'un désactive l'autre automatiquement.
-> `Échap` ou re-clic sur le bouton **📝 Note** quitte le mode note.
+> `Échap` ou re-clic sur le bouton **✎ Note** quitte le mode note.
 
 ### Modifier ou supprimer une note
 
 Cliquez sur le **marqueur orange** d'une note pour ouvrir le dialogue d'édition :
 - champs **Titre** et **Description** pré-remplis et modifiables ;
-- bouton **🗑 Supprimer** pour retirer définitivement la note.
+- bouton **✕ Supprimer** pour retirer définitivement la note.
 
 ### Sauvegarde
 
@@ -335,7 +335,7 @@ Affiche une vue d'ensemble de la trace dans un coin de la carte. Un rectangle ro
 
 Outil de mesure clic-à-clic :
 
-1. Activez l'outil (bouton **📏 Mesure** ou `Ctrl+D`).
+1. Activez l'outil (bouton **↔ Mesure** ou `Ctrl+D`).
 2. **Premier clic** : pose le point A.
 3. **Déplacez** la souris : une ligne animée et la distance live s'affichent dans la barre de statut.
 4. **Deuxième clic** : fige la mesure (la distance s'affiche sur la carte).
@@ -344,7 +344,7 @@ Outil de mesure clic-à-clic :
 
 ### Navigation par coordonnées (`Ctrl+G`)
 
-**Navigation → Aller aux coordonnées…** ou bouton **📍 Coordonnées**.
+**Navigation → Aller aux coordonnées…** ou bouton **◉ Coordonnées**.
 
 Saisissez une latitude et une longitude décimales (ou collez `48.8566, 2.3522`), choisissez le niveau de zoom, et la carte se centre sur ce point avec un repère rouge.
 
@@ -366,18 +366,18 @@ Sélectionnables via les boutons en haut de la fenêtre :
 | Mode | Description |
 |------|-------------|
 | Couleur unie | Couleur fixe par trace |
-| 🏔 Altitude | Gradient selon l'altitude, colorbar affichée |
+| ▲ Altitude | Gradient selon l'altitude, colorbar affichée |
 | ⚡ Vitesse | Gradient selon la vitesse, colorbar affichée |
 
 ### Fond de carte OSM
 
-Le bouton **🗺 Fond OSM** ajoute un plan OpenStreetMap en base de la scène 3D :
+Le bouton **▦ Fond OSM** ajoute un plan OpenStreetMap en base de la scène 3D :
 - Masqué automatiquement pendant la rotation pour la fluidité, réaffiché au relâchement.
 - Trois résolutions disponibles : **Basse** (64 px), **Moyenne** (128 px), **Haute** (256 px).
 
 ### Courbes de niveau SRTM
 
-Le bouton **🏔 Courbes** calcule et affiche les courbes de niveau issues des données d'altitude SRTM, espacées de 50 m, avec étiquettes d'altitude sur la carte.
+Le bouton **▲ Courbes** calcule et affiche les courbes de niveau issues des données d'altitude SRTM, espacées de 50 m, avec étiquettes d'altitude sur la carte.
 
 ### Animation du parcours
 
@@ -385,9 +385,9 @@ Une **barre de lecture** (fond sombre) sous le canvas 3D permet de rejouer le pa
 
 | Contrôle | Description |
 |----------|-------------|
-| ⏮ | Retour au point de départ |
-| ▶ Animer | Démarrer l'animation (devient ⏸ Pause) |
-| ⏸ Pause | Suspendre l'animation |
+| « | Retour au point de départ |
+| ▶ Animer | Démarrer l'animation (devient ‖ Pause) |
+| ‖ Pause | Suspendre l'animation |
 | × 1 / × 2 / × 5 / × 10 | Vitesse de lecture (points par tick de 100 ms) |
 | **Scrubber** | Glissière pleine largeur — cliquer ou glisser pour se positionner |
 
@@ -557,7 +557,7 @@ interface**, sans fichier intermédiaire.
 ### Démarrer la réception
 
 1. Branchez l'Arduino récepteur LoRa en USB.
-2. Cliquez sur le bouton bascule **📡 LoRa Live** dans la barre d'outils.
+2. Cliquez sur le bouton bascule **◎ LoRa Live** dans la barre d'outils.
 3. Une boîte de dialogue s'ouvre :
    - **Port série** : détecté automatiquement (`/dev/ttyUSB*` / `/dev/ttyACM*`) ou saisi manuellement.
    - **Vitesse (baud)** : 115200 par défaut (doit correspondre au firmware Arduino).
@@ -571,6 +571,6 @@ interface**, sans fichier intermédiaire.
 
 ### Arrêter la réception
 
-Re-cliquez sur **📡 LoRa Live**. Si au moins deux positions valides ont été reçues, l'application propose de charger la trace enregistrée (`tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`) sur la carte, comme n'importe quelle autre trace GPS.
+Re-cliquez sur **◎ LoRa Live**. Si au moins deux positions valides ont été reçues, l'application propose de charger la trace enregistrée (`tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`) sur la carte, comme n'importe quelle autre trace GPS.
 
 > Le bouton **Vider** du panneau de log efface l'historique affiché sans arrêter la réception.

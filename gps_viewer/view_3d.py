@@ -173,7 +173,7 @@ class View3DWindow(QDialog):
         tb.addWidget(lbl)
 
         self._combo = QComboBox()
-        self._combo.addItems(['— Couleur unie', '🏔  Altitude', '⚡  Vitesse'])
+        self._combo.addItems(['— Couleur unie', '▲  Altitude', '⚡  Vitesse'])
         self._combo.setFixedWidth(170)
         self._combo.setToolTip('Mode de coloration de la trace')
         self._combo.currentIndexChanged.connect(self._on_color_mode)
@@ -181,7 +181,7 @@ class View3DWindow(QDialog):
 
         tb.addSeparator()
 
-        self._act_map = QAction('🗺  Fond OSM', self)
+        self._act_map = QAction('▦  Fond OSM', self)
         self._act_map.setCheckable(True)
         self._act_map.setChecked(True)
         self._act_map.setToolTip('Afficher / masquer le fond de carte OpenStreetMap')
@@ -202,7 +202,7 @@ class View3DWindow(QDialog):
 
         tb.addSeparator()
 
-        self._act_contours = QAction('🏔  Courbes 3D', self)
+        self._act_contours = QAction('▲  Courbes 3D', self)
         self._act_contours.setCheckable(True)
         self._act_contours.setChecked(False)
         self._act_contours.setToolTip(
@@ -688,7 +688,7 @@ class View3DWindow(QDialog):
         ctrl = QHBoxLayout()
         ctrl.setSpacing(6)
 
-        btn_reset = QPushButton('⏮')
+        btn_reset = QPushButton('«')
         btn_reset.setFixedWidth(30)
         btn_reset.setToolTip('Revenir au début de la trace')
         btn_reset.clicked.connect(self._anim_reset)
@@ -743,7 +743,7 @@ class View3DWindow(QDialog):
                 self._anim_scrubber.blockSignals(True)
                 self._anim_scrubber.setValue(0)
                 self._anim_scrubber.blockSignals(False)
-            self._anim_btn.setText('⏸  Pause')
+            self._anim_btn.setText('‖  Pause')
             self._anim_playing = True
             self._anim_timer.start()
         else:

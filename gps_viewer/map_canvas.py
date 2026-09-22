@@ -1043,7 +1043,7 @@ class MapCanvas(FigureCanvas):
         ctrl = QHBoxLayout()
         ctrl.setSpacing(6)
 
-        self._play_btn_reset = QPushButton('⏮')
+        self._play_btn_reset = QPushButton('«')
         self._play_btn_reset.setFixedWidth(30)
         self._play_btn_reset.setToolTip('Retour au début')
         self._play_btn_reset.clicked.connect(self._playback_reset)
@@ -1096,7 +1096,7 @@ class MapCanvas(FigureCanvas):
             if self._play_index >= self._gps.count - 1:
                 self._play_index = 0
             self._playing = True
-            self._play_btn.setText('⏸  Pause')
+            self._play_btn.setText('‖  Pause')
             self._play_timer.start()
         else:
             self._playing = False
@@ -1913,7 +1913,7 @@ class MapCanvas(FigureCanvas):
             self._live_line, = self.ax.plot(
                 [], [], color=color, linewidth=2.5, zorder=5,
                 solid_capstyle='round', solid_joinstyle='round',
-                label='📡 LoRa Live')
+                label='◎ LoRa Live')
             self._live_dot, = self.ax.plot(
                 [], [], 'o', color=color, markersize=13, zorder=10,
                 markeredgecolor='white', markeredgewidth=2)
@@ -1974,7 +1974,7 @@ class MapCanvas(FigureCanvas):
         self._live_line, = self.ax.plot(
             [], [], color=self._live_color, linewidth=2.5, zorder=5,
             solid_capstyle='round', solid_joinstyle='round',
-            label='📡 LoRa Live')
+            label='◎ LoRa Live')
         self._live_dot, = self.ax.plot(
             [], [], 'o', color=self._live_color, markersize=13, zorder=10,
             markeredgecolor='white', markeredgewidth=2)

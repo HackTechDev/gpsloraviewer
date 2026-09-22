@@ -126,7 +126,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
                          'background: #f0f0f0; border-bottom: 1px solid #ccc; }')
         self.addToolBar(tb)
 
-        act_open = QAction('📂  Trace GPS', self)
+        act_open = QAction('☰  Trace GPS', self)
         act_open.setShortcut('Ctrl+O')
         act_open.setToolTip('Ajouter une trace GPS NMEA (Ctrl+O)')
         act_open.triggered.connect(self._open_dialog)
@@ -138,14 +138,14 @@ class MainWindow(PersistenceMixin, QMainWindow):
         act_home.triggered.connect(lambda: self._map.reset_view())
         tb.addAction(act_home)
 
-        act_goto = QAction('📍  Coordonnées', self)
+        act_goto = QAction('◉  Coordonnées', self)
         act_goto.setShortcut('Ctrl+G')
         act_goto.setToolTip('Naviguer vers des coordonnées GPS (Ctrl+G)')
         act_goto.triggered.connect(self._goto_coords)
         tb.addAction(act_goto)
 
         self._btn_tiles = QToolButton()
-        self._btn_tiles.setText('🗺  Fond de carte')
+        self._btn_tiles.setText('▦  Fond de carte')
         self._btn_tiles.setToolTip('Changer le fond de carte (Ctrl+T)')
         self._btn_tiles.setPopupMode(QToolButton.InstantPopup)
         self._btn_tiles.setShortcut('Ctrl+T')
@@ -159,12 +159,12 @@ class MainWindow(PersistenceMixin, QMainWindow):
 
         # ── Coloration de trace ──────────────────────────────────────
         self._btn_color = QToolButton()
-        self._btn_color.setText('🎨  Trace')
+        self._btn_color.setText('◆  Trace')
         self._btn_color.setToolTip('Coloration de la trace')
         self._btn_color.setPopupMode(QToolButton.InstantPopup)
         menu_color = QMenu(self._btn_color)
         for mode, label in [('flat', '— Couleur unie'),
-                             ('altitude', '🏔  Altitude'),
+                             ('altitude', '▲  Altitude'),
                              ('speed',    '⚡  Vitesse')]:
             a = QAction(label, self)
             a.triggered.connect(lambda c=False, m=mode: self._select_track_mode(m))
@@ -173,7 +173,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
         tb.addWidget(self._btn_color)
 
         # ── Mesure de distance ───────────────────────────────────────
-        self._act_meas = QAction('📏  Mesure', self)
+        self._act_meas = QAction('↔  Mesure', self)
         self._act_meas.setCheckable(True)
         self._act_meas.setShortcut('Ctrl+D')
         self._act_meas.setToolTip(
@@ -181,14 +181,14 @@ class MainWindow(PersistenceMixin, QMainWindow):
         tb.addAction(self._act_meas)
 
         # ── Annotation photo ─────────────────────────────────────────
-        self._act_photo = QAction('📷  Photo', self)
+        self._act_photo = QAction('◇  Photo', self)
         self._act_photo.setCheckable(True)
         self._act_photo.setToolTip(
             'Annoter la carte avec une photo (P)  •  Clic pour choisir la position')
         tb.addAction(self._act_photo)
 
         # ── Annotation note ──────────────────────────────────────────
-        self._act_note = QAction('📝  Note', self)
+        self._act_note = QAction('✎  Note', self)
         self._act_note.setCheckable(True)
         self._act_note.setToolTip(
             'Ajouter une note sur la carte (N)  •  Clic pour choisir la position')
@@ -202,14 +202,14 @@ class MainWindow(PersistenceMixin, QMainWindow):
         act_grid.toggled.connect(lambda v: self._map.toggle_grid(v))
         tb.addAction(act_grid)
 
-        act_ov = QAction('🔍  Miniature', self)
+        act_ov = QAction('⬢  Miniature', self)
         act_ov.setCheckable(True)
         act_ov.setToolTip('Afficher la miniature de localisation (Ctrl+M)')
         act_ov.setShortcut('Ctrl+M')
         act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
         tb.addAction(act_ov)
 
-        act_contours = QAction('🏔  Courbes', self)
+        act_contours = QAction('▲  Courbes', self)
         act_contours.setCheckable(True)
         act_contours.setToolTip(
             'Afficher les courbes de niveau SRTM (30 m)\n'
@@ -218,7 +218,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
         tb.addAction(act_contours)
 
         # ── Vue 3D ──────────────────────────────────────────────────
-        act_3d = QAction('🌐  Vue 3D', self)
+        act_3d = QAction('◈  Vue 3D', self)
         act_3d.setShortcut('Ctrl+3')
         act_3d.setToolTip('Afficher la trace en 3D (altitude) (Ctrl+3)')
         act_3d.triggered.connect(self._open_3d_view)
@@ -227,7 +227,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
         # ── Réception LoRa live ──────────────────────────────────────
         tb.addSeparator()
 
-        self._act_lora = QAction('📡  LoRa Live', self)
+        self._act_lora = QAction('◎  LoRa Live', self)
         self._act_lora.setCheckable(True)
         self._act_lora.setToolTip(
             'Démarrer / arrêter la réception GPS en temps réel\n'
@@ -248,7 +248,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
         _sel_layout = QHBoxLayout(_track_selector)
         _sel_layout.setContentsMargins(4, 0, 4, 0)
         _sel_layout.setSpacing(4)
-        _lbl_sel = QLabel('📊 Graphiques :')
+        _lbl_sel = QLabel('▧ Graphiques :')
         _lbl_sel.setStyleSheet('color:#555; font-size:12px;')
         self._track_combo = QComboBox()
         self._track_combo.setFixedWidth(180)
@@ -710,7 +710,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
 
     def _select_track_mode(self, mode: str):
         labels = {'flat': 'Trace', 'altitude': 'Trace ▲alt', 'speed': 'Trace ⚡vit'}
-        self._btn_color.setText(f'🎨  {labels.get(mode, "Trace")}')
+        self._btn_color.setText(f'◆  {labels.get(mode, "Trace")}')
         self._map.set_track_mode(mode)
 
     def _on_toggle_cursor_info(self, visible: bool):
@@ -807,7 +807,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
     _TILE_SOURCES = {
         'osm': {
             'source': cx.providers.OpenStreetMap.Mapnik,
-            'label':  '🗺  OpenStreetMap',
+            'label':  '▦  OpenStreetMap',
             'short':  'OSM',
             # OSM bloque le User-Agent aléatoire par défaut de contextily
             # ('contextily-<uuid>'), trop utilisé par des scripts qui ne
@@ -818,19 +818,19 @@ class MainWindow(PersistenceMixin, QMainWindow):
         },
         'esri': {
             'source': cx.providers.Esri.WorldImagery,
-            'label':  '🛰  Satellite (Esri)',
+            'label':  '⊕  Satellite (Esri)',
             'short':  'Satellite Esri',
             'headers': {},
         },
         'ign_ortho': {
             'source':  _IGN_BASE + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&FORMAT=image/jpeg',
-            'label':  '🛰  Orthophoto IGN',
+            'label':  '⊕  Orthophoto IGN',
             'short':  'Orthophoto IGN',
             'headers': {'User-Agent': 'GPS-Viewer/1.0'},
         },
         'ign_plan': {
             'source':  _IGN_BASE + '&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&FORMAT=image/png',
-            'label':  '🗾  Plan IGN',
+            'label':  '⬡  Plan IGN',
             'short':  'Plan IGN',
             'headers': {'User-Agent': 'GPS-Viewer/1.0'},
         },
@@ -839,7 +839,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
     def _select_tiles(self, key: str):
         info = self._TILE_SOURCES[key]
         self._map.set_tile_source(info['source'], info.get('headers', {}))
-        self._btn_tiles.setText(f"🗺  {info['short']}")
+        self._btn_tiles.setText(f"▦  {info['short']}")
 
     # ── Navigation par coordonnées ────────────────────────────────────
 
@@ -1376,7 +1376,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
         self._lbl_lora_status.setText('⬤  LoRa Live — 0 pts')
         self._lbl_lora_status.setVisible(True)
         self._sb.showMessage(
-            f'📡 Réception LoRa active — Port : {port} @ {baud} baud'
+            f'◎ Réception LoRa active — Port : {port} @ {baud} baud'
             f'  •  Fichier : {self._lora_output_path.name}')
 
     def _stop_lora(self, *, ask_load: bool = True):
@@ -1452,7 +1452,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
         self._lbl_lora_status.setText(f'⬤  LoRa Live — {n} pts')
         if n % 10 == 0:
             self._sb.showMessage(
-                f'📡 LoRa Live — {n} positions GPS'
+                f'◎ LoRa Live — {n} positions GPS'
                 + (f'  •  {self._lora_output_path.name}'
                    if self._lora_output_path else ''))
 

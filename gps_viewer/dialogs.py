@@ -304,7 +304,7 @@ class PhotoViewDialog(QDialog):
         btn_row = QHBoxLayout()
         btn_row.addStretch()
 
-        btn_del = QPushButton('🗑  Supprimer')
+        btn_del = QPushButton('✕  Supprimer')
         btn_del.setFixedWidth(130)
         btn_del.setStyleSheet(
             'QPushButton { color:white; background:#e74c3c; border-radius:4px; padding:4px 8px; }'
@@ -542,7 +542,7 @@ class NoteDialog(QDialog):
         btn_row = QHBoxLayout()
 
         if edit_mode:
-            btn_del = QPushButton('🗑  Supprimer')
+            btn_del = QPushButton('✕  Supprimer')
             btn_del.setStyleSheet('color:#c0392b;')
             btn_del.clicked.connect(self._on_delete)
             btn_row.addWidget(btn_del)
