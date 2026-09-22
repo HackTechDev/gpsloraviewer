@@ -21,7 +21,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QSize, QThread, QTimer, pyqtSignal
 
 from gps_nmea import GPSData, _webmerc_to_latlon, WEB_MERC_R
-from map_canvas import _TRACK_PALETTE, _CMAP_ALT, _CMAP_SPD, _fmt_dist, _fmt_elapsed
+from map_canvas import (_TRACK_PALETTE, _CMAP_ALT, _CMAP_SPD, _fmt_dist,
+                         _fmt_elapsed, _retire_thread)
 
 
 # ── Worker : téléchargement des tuiles OSM hors thread principal ──────
@@ -257,12 +258,17 @@ class View3DWindow(QDialog):
     def _cancel_fetch(self):
         if self._tile_fetcher and self._tile_fetcher.isRunning():
             self._tile_fetcher.cancel()
+            _retire_thread(self._tile_fetcher)   # cancel() est coopératif : le
+            # thread peut tourner encore un moment — on garde une référence
+            # ailleurs pour éviter « QThread: Destroyed while thread is still
+            # running » si self._tile_fetcher est remplacé ou détruit avant.
             try:
                 self._tile_fetcher.tile_ready.disconnect()
             except TypeError:
                 pass
         if self._srtm_fetcher and self._srtm_fetcher.isRunning():
             self._srtm_fetcher.cancel()
+            _retire_thread(self._srtm_fetcher)
             try:
                 self._srtm_fetcher.srtm_ready.disconnect()
             except TypeError:

@@ -28,6 +28,23 @@ from PyQt5.QtWidgets import (QSizePolicy, QApplication,
 
 from gps_nmea import GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R, parse_time_s
 
+# ── Threads réseau annulés mais encore actifs ──────────────────────────
+# cancel() est coopératif : il ne peut pas interrompre un appel réseau déjà
+# bloquant (contextily/requests). Si on abandonne la référence Python d'un
+# QThread pendant qu'il tourne encore (remplacement par un nouveau worker,
+# reset(), fermeture de fenêtre…), Qt détruit l'objet C++ sous-jacent et
+# plante avec « QThread: Destroyed while thread is still running ». On garde
+# donc une référence ici jusqu'à la fin réelle du thread (signal `finished`).
+_retired_threads: list = []
+
+
+def _retire_thread(thread) -> None:
+    if thread is None or not thread.isRunning():
+        return
+    _retired_threads.append(thread)
+    thread.finished.connect(
+        lambda: thread in _retired_threads and _retired_threads.remove(thread))
+
 # ── Cache persistant de tuiles ────────────────────────────────────────
 # Par défaut contextily stocke les tuiles dans un dossier temporaire
 # supprimé à la fermeture. On le redirige vers ~/.cache/gps_viewer/tiles
@@ -638,6 +655,7 @@ class MapCanvas(FigureCanvas):
         # Annule le worker précédent s'il tourne encore
         if self._tile_worker is not None and self._tile_worker.isRunning():
             self._tile_worker.cancel()
+            _retire_thread(self._tile_worker)
 
         cached = self._tile_cache.get(key)
         if cached is not None:
@@ -1137,11 +1155,13 @@ class MapCanvas(FigureCanvas):
         self._contour_timer.stop()
         if self._contour_worker is not None:
             self._contour_worker.cancel()
+            _retire_thread(self._contour_worker)
             self._contour_worker = None
         self._contour_sets   = []
         self._contour_labels = []
         if self._tile_worker is not None:
             self._tile_worker.cancel()
+            _retire_thread(self._tile_worker)
             self._tile_worker = None
         self._tile_timer.stop()
         self._meas_timer.stop()
@@ -1788,6 +1808,7 @@ class MapCanvas(FigureCanvas):
             return
         if self._contour_worker is not None and self._contour_worker.isRunning():
             self._contour_worker.cancel()
+            _retire_thread(self._contour_worker)
         self._clear_contours()
         self._contour_req += 1
         lat_min, lat_max, lon_min, lon_max = self._view_bounds_latlon()

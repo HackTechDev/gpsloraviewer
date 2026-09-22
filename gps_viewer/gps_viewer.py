@@ -32,7 +32,8 @@ from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen
 
 from gps_nmea import GPSData, load_points, to_webmerc, _webmerc_to_latlon
-from map_canvas import MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR, _cache_size_mb
+from map_canvas import (MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR,
+                         _cache_size_mb, _retire_thread)
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
 from stats_panel import StatsPanel
 from dialogs import (CoordDialog, PhotoViewDialog, ParcoursPropDialog,
@@ -831,6 +832,18 @@ class MainWindow(QMainWindow):
             self._lora_thread.stop()
             self._lora_thread.wait(2000)
             self._lora_thread = None
+        # Threads réseau de la carte (tuiles, courbes SRTM) : cancel() est
+        # coopératif et ne les interrompt pas forcément avant la fermeture
+        # de la fenêtre — on les retient ailleurs pour éviter le crash
+        # « QThread: Destroyed while thread is still running ».
+        if self._map._tile_worker is not None:
+            self._map._tile_worker.cancel()
+            _retire_thread(self._map._tile_worker)
+        if self._map._contour_worker is not None:
+            self._map._contour_worker.cancel()
+            _retire_thread(self._map._contour_worker)
+        if self._view3d is not None:
+            self._view3d._cancel_fetch()
         if self._pref_remember_layout:
             self._save_layout()
         event.accept()
