@@ -527,13 +527,13 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
             self._lora_thread.stop()
             self._lora_thread.wait(2000)
             self._lora_thread = None
-        # Threads réseau de la carte (tuiles, courbes SRTM) : cancel() est
-        # coopératif et ne les interrompt pas forcément avant la fermeture
-        # de la fenêtre — on les retient ailleurs pour éviter le crash
+        # Tuiles : annule les téléchargements en attente et coupe l'émission
+        # des signaux (les threads du chargeur ne sont pas des QThread).
+        self._map._tiles.shutdown()
+        # Courbes SRTM : cancel() est coopératif et n'interrompt pas
+        # forcément le thread avant la fermeture de la fenêtre — on le
+        # retient ailleurs pour éviter le crash
         # « QThread: Destroyed while thread is still running ».
-        if self._map._tile_worker is not None:
-            self._map._tile_worker.cancel()
-            _retire_thread(self._map._tile_worker)
         if self._map._contour_worker is not None:
             self._map._contour_worker.cancel()
             _retire_thread(self._map._contour_worker)
