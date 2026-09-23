@@ -120,6 +120,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
     def _build_ui(self):
         # Toolbar
         tb = QToolBar(self)
+        self._tb = tb
         tb.setMovable(False)
         tb.setIconSize(QSize(18, 18))
         tb.setStyleSheet('QToolBar { spacing: 4px; padding: 3px 6px; '
@@ -465,6 +466,21 @@ class MainWindow(PersistenceMixin, QMainWindow):
         a_home.setShortcut('Ctrl+R')
         a_home.triggered.connect(lambda: self._map.reset_view())
         nm.addAction(a_home)
+
+        nm.addSeparator()
+        self._act_fullscreen = QAction('Plein écran (carte)', self)
+        self._act_fullscreen.setCheckable(True)
+        self._act_fullscreen.setShortcut('F11')
+        self._act_fullscreen.toggled.connect(self._set_fullscreen)
+        nm.addAction(self._act_fullscreen)
+
+        # En plein écran, la barre d'outils et la barre de menus sont masquées :
+        # Qt désactive alors les raccourcis de leurs actions. On rattache les
+        # actions à raccourci à la fenêtre elle-même pour qu'ils restent actifs.
+        for act in self._tb.actions() + [a for m in mb.findChildren(QMenu)
+                                         for a in m.actions()]:
+            if not act.shortcut().isEmpty():
+                self.addAction(act)
 
         om = mb.addMenu('Outils')
         a_cache_info = QAction('Informations sur le cache…', self)
@@ -840,6 +856,31 @@ class MainWindow(PersistenceMixin, QMainWindow):
         info = self._TILE_SOURCES[key]
         self._map.set_tile_source(info['source'], info.get('headers', {}))
         self._btn_tiles.setText(f"▦  {info['short']}")
+
+    # ── Plein écran ───────────────────────────────────────────────────
+
+    def _set_fullscreen(self, on: bool):
+        """Plein écran : seule la carte reste affichée (F11 pour revenir)."""
+        if on == self.isFullScreen():
+            return
+        if on:
+            self._fs_saved = {
+                'maximized': self.isMaximized(),
+                'widgets': {w: w.isVisible() for w in (
+                    self.menuBar(), self._tb, self._charts_split,
+                    self._lora_log_panel, self._stats, self._sb)},
+            }
+            for w in self._fs_saved['widgets']:
+                w.setVisible(False)
+            self.showFullScreen()
+        else:
+            saved = getattr(self, '_fs_saved', None) or {}
+            for w, visible in saved.get('widgets', {}).items():
+                w.setVisible(visible)
+            if saved.get('maximized'):
+                self.showMaximized()
+            else:
+                self.showNormal()
 
     # ── Navigation par coordonnées ────────────────────────────────────
 

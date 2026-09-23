@@ -49,8 +49,6 @@
 
 - **Mode sombre** : thème sombre pour les graphiques, le panneau et la barre d'outils
 - **Raccourcis clavier supplémentaires** : `+` / `-` pour zoomer, flèches pour pan
-- **Plein écran** : touche F11 pour passer la carte en plein écran
-- **Recherche de lieu (Nominatim)** : dans le dialog "Aller aux coordonnées", ajouter un champ de recherche par nom de lieu via l'API Nominatim d'OSM
 
 ## Barre de lecture / Suivi
 

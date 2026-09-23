@@ -3,20 +3,25 @@ dialogs.py — CoordDialog, PhotoViewDialog, ParcoursPropDialog,
              SettingsDialog, NoteDialog, LoraConnectDialog
 """
 
+import json
+import math
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from PIL import Image as PilImage
 
 import numpy as np
 
 from lora_common import detect_serial_ports
+from map_tiles import _retire_thread
 
 from PyQt5.QtWidgets import (
     QDialog, QDialogButtonBox, QDoubleSpinBox, QSpinBox, QLineEdit,
     QGridLayout, QScrollArea, QPushButton, QTextEdit, QFormLayout,
     QVBoxLayout, QHBoxLayout, QLabel, QMessageBox, QSizePolicy,
-    QGroupBox, QCheckBox, QSlider, QComboBox,
+    QGroupBox, QCheckBox, QSlider, QComboBox, QListWidget, QListWidgetItem,
 )
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtCore import Qt, QSize, QThread, pyqtSignal
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import QApplication
 
@@ -60,18 +65,88 @@ def _pil_to_pixmap(pil_img) -> QPixmap:
 #  Dialogue de navigation par coordonnées
 # ══════════════════════════════════════════════════════════════════════
 
+_NOMINATIM_URL = 'https://nominatim.openstreetmap.org/search'
+# La politique d'usage de Nominatim impose un User-Agent identifiant l'application
+# et au plus 1 requête/s (pas d'autocomplétion : recherche sur action explicite).
+_NOMINATIM_HEADERS = {'User-Agent': 'GPS-Viewer/1.0', 'Accept-Language': 'fr'}
+
+
+def _zoom_from_bbox(bbox) -> int:
+    """Estime un niveau de zoom (3–18) à partir d'une boundingbox Nominatim
+    [lat_min, lat_max, lon_min, lon_max]."""
+    try:
+        lat_min, lat_max, lon_min, lon_max = (float(v) for v in bbox)
+        span = max(lat_max - lat_min, lon_max - lon_min)
+    except (TypeError, ValueError):
+        return 16
+    if span <= 0:
+        return 17
+    return max(3, min(18, round(math.log2(360.0 / span))))
+
+
+class _NominatimWorker(QThread):
+    """Interroge l'API Nominatim d'OSM hors du thread GUI."""
+    finished_ok = pyqtSignal(list)
+    failed      = pyqtSignal(str)
+
+    def __init__(self, query: str, parent=None):
+        super().__init__(parent)
+        self._query = query
+
+    def run(self):
+        params = urllib.parse.urlencode(
+            {'q': self._query, 'format': 'jsonv2', 'limit': 10})
+        req = urllib.request.Request(f'{_NOMINATIM_URL}?{params}',
+                                     headers=_NOMINATIM_HEADERS)
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                self.finished_ok.emit(json.loads(resp.read().decode('utf-8')))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class CoordDialog(QDialog):
-    """Fenêtre de saisie de coordonnées GPS."""
+    """Fenêtre de saisie de coordonnées GPS (ou recherche de lieu par nom)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Aller aux coordonnées')
-        self.setFixedSize(380, 260)
+        self.setFixedWidth(440)
+        self._worker: _NominatimWorker | None = None
         self._build()
 
     def _build(self):
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
+
+        # ── Recherche de lieu (Nominatim) ────────────────────────────
+        lbl_search = QLabel('Rechercher un lieu :')
+        lbl_search.setStyleSheet('font-weight:bold; color:#444;')
+        layout.addWidget(lbl_search)
+
+        row = QHBoxLayout()
+        self._search = QLineEdit()
+        self._search.setPlaceholderText('Ex : Mont Sainte-Odile, Colmar…')
+        self._search.returnPressed.connect(self._do_search)
+        row.addWidget(self._search, stretch=1)
+        self._btn_search = QPushButton('Rechercher')
+        self._btn_search.setAutoDefault(False)
+        self._btn_search.clicked.connect(self._do_search)
+        row.addWidget(self._btn_search)
+        layout.addLayout(row)
+
+        self._results = QListWidget()
+        self._results.setFixedHeight(110)
+        self._results.setVisible(False)
+        self._results.currentItemChanged.connect(self._on_result_selected)
+        self._results.itemDoubleClicked.connect(lambda _: self.accept())
+        layout.addWidget(self._results)
+
+        self._search_status = QLabel()
+        self._search_status.setStyleSheet('color:#999; font-size:10px;')
+        self._search_status.setWordWrap(True)
+        self._search_status.setVisible(False)
+        layout.addWidget(self._search_status)
 
         # ── Champ de collage rapide ──────────────────────────────────
         lbl_paste = QLabel('Coller des coordonnées (lat, lon) :')
@@ -127,6 +202,80 @@ class CoordDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
         layout.addWidget(btns)
+
+    # ── Recherche Nominatim ──────────────────────────────────────────
+
+    def _do_search(self):
+        query = self._search.text().strip()
+        if not query or self._worker is not None:
+            return
+        self._btn_search.setEnabled(False)
+        self._results.clear()
+        self._results.setVisible(False)
+        self._set_search_status('Recherche en cours…')
+        self._worker = _NominatimWorker(query, self)
+        self._worker.finished_ok.connect(self._on_search_results)
+        self._worker.failed.connect(self._on_search_failed)
+        self._worker.finished.connect(self._on_search_finished)
+        self._worker.start()
+
+    def _on_search_results(self, results: list):
+        if not results:
+            self._set_search_status('Aucun lieu trouvé.')
+            return
+        for r in results:
+            try:
+                lat, lon = float(r['lat']), float(r['lon'])
+            except (KeyError, TypeError, ValueError):
+                continue
+            item = QListWidgetItem(r.get('display_name', f'{lat:.5f}, {lon:.5f}'))
+            item.setToolTip(f"{item.text()}\n{lat:.6f}, {lon:.6f}")
+            item.setData(Qt.UserRole, (lat, lon, _zoom_from_bbox(r.get('boundingbox'))))
+            self._results.addItem(item)
+        self._results.setVisible(True)
+        self._set_search_status(
+            f'{self._results.count()} résultat(s) — double-clic pour y aller  '
+            '•  Données © contributeurs OpenStreetMap')
+        self._results.setCurrentRow(0)
+        self.adjustSize()
+
+    def _on_search_failed(self, msg: str):
+        self._set_search_status(f'Échec de la recherche : {msg}')
+
+    def _on_search_finished(self):
+        self._worker = None
+        self._btn_search.setEnabled(True)
+
+    def _set_search_status(self, text: str):
+        self._search_status.setText(text)
+        self._search_status.setVisible(True)
+        self.adjustSize()
+
+    def _on_result_selected(self, item, _prev=None):
+        if item is None:
+            return
+        lat, lon, zoom = item.data(Qt.UserRole)
+        self._lat.setValue(lat)
+        self._lon.setValue(lon)
+        self._zoom.setValue(zoom)
+
+    def keyPressEvent(self, event):
+        # Entrée dans le champ de recherche lance la recherche sans valider le dialog
+        if (event.key() in (Qt.Key_Return, Qt.Key_Enter)
+                and self._search.hasFocus()):
+            return
+        super().keyPressEvent(event)
+
+    def done(self, result):
+        # Ne pas détruire le QThread (enfant du dialog) pendant qu'il tourne
+        if self._worker is not None:
+            for sig in (self._worker.finished_ok, self._worker.failed,
+                        self._worker.finished):
+                sig.disconnect()
+            self._worker.setParent(None)
+            _retire_thread(self._worker)
+            self._worker = None
+        super().done(result)
 
     def _parse_paste(self, text: str):
         """Extrait lat, lon depuis une chaîne 'lat, lon' collée."""

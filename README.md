@@ -206,7 +206,8 @@ dehors de `$HOME` reste enregistré en absolu.
 | Ctrl+L | Grille de coordonnées |
 | Ctrl+M | Miniature de localisation |
 | Ctrl+D | Outil de mesure |
-| Ctrl+G | Naviguer vers des coordonnées |
+| Ctrl+G | Naviguer vers des coordonnées / rechercher un lieu |
+| F11 | Plein écran (carte seule) |
 | Ctrl+3 | Vue 3D |
 | P | Mode annotation photo |
 | Échap | Effacer les mesures |

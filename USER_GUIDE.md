@@ -348,6 +348,12 @@ Outil de mesure clic-à-clic :
 
 Saisissez une latitude et une longitude décimales (ou collez `48.8566, 2.3522`), choisissez le niveau de zoom, et la carte se centre sur ce point avec un repère rouge.
 
+Vous pouvez aussi **rechercher un lieu par son nom** (champ *Rechercher un lieu*, puis Entrée ou **Rechercher**) : la recherche utilise le service Nominatim d'OpenStreetMap (connexion Internet requise). Cliquez sur un résultat pour remplir les coordonnées et le zoom, ou double-cliquez pour y aller directement.
+
+### Plein écran (`F11`)
+
+**Navigation → Plein écran (carte)** ou `F11` : affiche uniquement la carte en plein écran. Appuyez de nouveau sur `F11` pour revenir à l'affichage normal.
+
 ---
 
 ## 13. La vue 3D
@@ -484,7 +490,8 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 | `Ctrl+L` | Afficher / masquer la grille de coordonnées |
 | `Ctrl+M` | Afficher / masquer la miniature |
 | `Ctrl+D` | Activer / désactiver l'outil de mesure |
-| `Ctrl+G` | Naviguer vers des coordonnées |
+| `Ctrl+G` | Naviguer vers des coordonnées / rechercher un lieu |
+| `F11` | Plein écran (carte seule) |
 | `Ctrl+3` | Ouvrir / fermer la vue 3D |
 | `Ctrl+,` | Ouvrir les Préférences |
 | `Ctrl+Q` | Quitter |

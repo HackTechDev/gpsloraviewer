@@ -223,11 +223,18 @@ La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent égalem
 ## Navigation par coordonnées
 
 - Menu **Navigation → Aller aux coordonnées…** (Ctrl+G) ou bouton `◉ Coordonnées`
+- **Recherche de lieu par nom** (API Nominatim d'OpenStreetMap) : saisir un nom puis Entrée ou **Rechercher** ; jusqu'à 10 résultats listés, la sélection remplit latitude / longitude et un zoom adapté à l'étendue du lieu, double-clic pour y aller directement (requête en arrière-plan, sans autocomplétion conformément à la politique d'usage de Nominatim)
 - Saisie de la latitude et longitude avec 6 décimales
 - Champ de collage rapide : coller `48.8566, 2.3522` remplit automatiquement les champs
 - Sélecteur de niveau de zoom (1 à 19)
 - Un repère rouge est affiché à la position choisie
 - Zoom, pan et changement de couche restent fonctionnels après navigation
+
+## Plein écran (F11)
+
+- Menu **Navigation → Plein écran (carte)** ou touche `F11` : la fenêtre passe en plein écran et seule la carte reste affichée (barres de menus / outils / statut, graphiques et panneau de statistiques masqués)
+- `F11` à nouveau restaure l'affichage précédent (fenêtre maximisée ou non, panneaux visibles ou non)
+- Les raccourcis clavier restent actifs en plein écran
 
 ## Vue 3D (Ctrl+3)
 
