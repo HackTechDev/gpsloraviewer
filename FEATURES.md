@@ -316,6 +316,7 @@ Les préférences sont persistées dans `~/.config/gps_viewer/settings.json`.
 ## Performances
 
 - **Chargement des tuiles tuile par tuile** (`map_tiles.TileLoader`) : téléchargements en parallèle sur des connexions HTTP keep-alive (2 connexions pour OpenStreetMap, conformément à sa politique d'usage ; 6 pour les autres sources), affichage progressif du centre vers les bords ; les traces sont immédiatement visibles pendant que les tuiles se chargent
+- **Repli IPv6 → IPv4 rapide** : sur un réseau où l'IPv6 est annoncé mais ne passe pas, chaque adresse est essayée 1 s au plus en alternant IPv6/IPv4, puis la famille qui répond est mémorisée par serveur (évitait ~40 s d'attente sur le fond Satellite Esri)
 - **Réactivité au zoom / pan** : tuiles demandées 120 ms après le dernier cran de molette et au fil du glisser ; les demandes pour des vues déjà quittées sont annulées ; rendus regroupés (au plus un toutes les 60 ms pendant le chargement)
 - **Barre de progression** : indicateur pulsé dans la barre de statut pendant le téléchargement
 - **Cache LRU en mémoire** : 400 dernières tuiles décodées conservées en RAM — revenir sur une zone ou un niveau de zoom déjà vu est instantané

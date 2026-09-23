@@ -10,6 +10,8 @@ map_tiles.py — Infrastructure de chargement des tuiles cartographiques :
 import hashlib
 import io
 import math
+import socket
+import sys
 import threading
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +21,11 @@ import numpy as np
 import contextily as cx
 import requests
 import xyzservices
+from requests.adapters import HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.exceptions import (ConnectTimeoutError, NameResolutionError,
+                                NewConnectionError)
 from PIL import Image as PilImage
 
 from PyQt5.QtCore import QCoreApplication, QObject, QThread, pyqtSignal
@@ -161,6 +168,118 @@ class _TileCache:
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  Connexions HTTP avec repli IPv6 → IPv4 (« Happy Eyeballs » simplifié)
+# ══════════════════════════════════════════════════════════════════════
+# urllib3 essaie les adresses d'un serveur l'une après l'autre, chacune avec
+# le délai de connexion complet. Sur un réseau où l'IPv6 est annoncé mais ne
+# passe pas, un serveur à plusieurs adresses IPv6 (CDN : Esri/CloudFront…)
+# coûte alors 5 s × N avant d'arriver à l'IPv4 — ~40 s constatés. Ici on
+# alterne les familles (RFC 8305), on borne chaque essai non final à
+# _FALLBACK_TIMEOUT et on mémorise par serveur la famille qui a répondu.
+
+_FALLBACK_TIMEOUT = 1.0
+_preferred_family: dict = {}          # hôte → socket.AF_INET / AF_INET6
+_preferred_lock = threading.Lock()
+
+
+def _ordered_addrinfo(host: str, port: int) -> list:
+    infos = socket.getaddrinfo(host, port, 0, socket.SOCK_STREAM)
+    with _preferred_lock:
+        pref = _preferred_family.get(host)
+    if pref is not None:
+        return sorted(infos, key=lambda ai: ai[0] != pref)
+    v6 = [ai for ai in infos if ai[0] == socket.AF_INET6]
+    v4 = [ai for ai in infos if ai[0] != socket.AF_INET6]
+    ordered = []
+    for k in range(max(len(v6), len(v4))):
+        ordered += v6[k:k + 1] + v4[k:k + 1]
+    return ordered
+
+
+def _connect_with_fallback(host: str, port: int, timeout,
+                           source_address=None, socket_options=None):
+    """Équivalent de urllib3.util.connection.create_connection avec repli
+    rapide d'une famille d'adresses à l'autre."""
+    if host.startswith('['):
+        host = host.strip('[]')
+    infos = _ordered_addrinfo(host, port)
+    if not infos:
+        raise OSError('getaddrinfo returns an empty list')
+    full = timeout if isinstance(timeout, (int, float)) else None
+    err = None
+    for n, (af, socktype, proto, _, sa) in enumerate(infos):
+        last = n == len(infos) - 1
+        sock = None
+        try:
+            sock = socket.socket(af, socktype, proto)
+            for opt in socket_options or ():
+                sock.setsockopt(*opt)
+            if last:
+                sock.settimeout(full)
+            else:
+                sock.settimeout(_FALLBACK_TIMEOUT if full is None
+                                else min(full, _FALLBACK_TIMEOUT))
+            if source_address:
+                sock.bind(source_address)
+            sock.connect(sa)
+            sock.settimeout(full)
+            with _preferred_lock:
+                _preferred_family[host] = af
+            return sock
+        except OSError as exc:
+            err = exc
+            if sock is not None:
+                sock.close()
+    raise err
+
+
+class _FallbackConnMixin:
+    def _new_conn(self) -> socket.socket:
+        # Reprend HTTPConnection._new_conn (urllib3 2.x) avec notre connexion
+        try:
+            sock = _connect_with_fallback(
+                self._dns_host, self.port, self.timeout,
+                source_address=self.source_address,
+                socket_options=self.socket_options)
+        except socket.gaierror as e:
+            raise NameResolutionError(self.host, self, e) from e
+        except socket.timeout as e:
+            raise ConnectTimeoutError(
+                self, f'Connection to {self.host} timed out. '
+                      f'(connect timeout={self.timeout})') from e
+        except OSError as e:
+            raise NewConnectionError(
+                self, f'Failed to establish a new connection: {e}') from e
+        sys.audit('http.client.connect', self, self.host, self.port)
+        return sock
+
+
+class _FallbackHTTPConnection(_FallbackConnMixin, HTTPConnection):
+    pass
+
+
+class _FallbackHTTPSConnection(_FallbackConnMixin, HTTPSConnection):
+    pass
+
+
+class _FallbackHTTPPool(HTTPConnectionPool):
+    ConnectionCls = _FallbackHTTPConnection
+
+
+class _FallbackHTTPSPool(HTTPSConnectionPool):
+    ConnectionCls = _FallbackHTTPSConnection
+
+
+class _FallbackAdapter(HTTPAdapter):
+    """Adaptateur requests utilisant les connexions avec repli IPv6 → IPv4."""
+
+    def init_poolmanager(self, *args, **kwargs):
+        super().init_poolmanager(*args, **kwargs)
+        self.poolmanager.pool_classes_by_scheme = {
+            'http': _FallbackHTTPPool, 'https': _FallbackHTTPSPool}
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  Chargeur de tuiles : disque → réseau, en parallèle, tuile par tuile
 # ══════════════════════════════════════════════════════════════════════
 
@@ -276,6 +395,9 @@ class TileLoader(QObject):
         sess = getattr(self._local, 'session', None)
         if sess is None:
             sess = self._local.session = requests.Session()
+            adapter = _FallbackAdapter()
+            sess.mount('http://', adapter)
+            sess.mount('https://', adapter)
         return sess
 
     @staticmethod
