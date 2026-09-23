@@ -467,6 +467,10 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
         premier) et apparaissent au fur et à mesure (_on_tile_ready)."""
         if self._default_lim is None:
             return
+        # aspect 'equal' / adjustable 'datalim' : les limites réelles ne sont
+        # recalculées qu'au rendu — sans ça, juste après un set_xlim, zoom et
+        # emprise des tuiles seraient calculés sur la vue demandée, pas affichée
+        self.ax.apply_aspect()
         self._update_overview()
         if self._grid_visible:
             self._draw_grid()
