@@ -92,7 +92,6 @@
 
 ## Qualité du code
 
-- **Découper les gros fichiers** : les menus et les outils de la carte (mesure, photos, notes) dans `MapCanvas`/`MainWindow` restent volumineux (l'infrastructure de tuiles et la persistance en ont déjà été extraites, voir `map_tiles.py`/`app_config.py`)
 - **Étendre les tests automatisés** : `tests/test_gps_nmea.py` couvre le parseur NMEA et le modèle `GPSData` ; le reste de l'application (Qt/matplotlib) n'a pas de tests
 
 ## Documentation et packaging

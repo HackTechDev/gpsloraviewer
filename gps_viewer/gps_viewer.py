@@ -13,7 +13,6 @@ import math
 import glob
 import shutil
 import json
-import datetime
 import traceback
 from pathlib import Path
 
@@ -21,28 +20,29 @@ import contextily as cx
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QSplitter,
-    QVBoxLayout, QHBoxLayout, QLabel, QAction,
+    QVBoxLayout, QHBoxLayout, QLabel,
     QFileDialog, QStatusBar, QMessageBox,
-    QFrame, QToolBar, QSizePolicy,
-    QToolButton, QMenu, QProgressBar,
-    QDialog, QDialogButtonBox, QSplashScreen, QComboBox,
+    QFrame, QSizePolicy, QProgressBar,
+    QDialog, QDialogButtonBox, QSplashScreen,
     QPushButton, QPlainTextEdit,
 )
-from PyQt5.QtCore import Qt, QSize, QTimer, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen
 
-from gps_nmea import GPSData, load_points, to_webmerc, _webmerc_to_latlon
+from gps_nmea import GPSData, load_points, to_webmerc
 from map_canvas import (MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR,
                          _cache_size_mb, _retire_thread)
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
 from stats_panel import StatsPanel
-from dialogs import (CoordDialog, PhotoViewDialog, ParcoursPropDialog,
-                     SettingsDialog, NoteDialog, LoraConnectDialog)
+from dialogs import (CoordDialog, ParcoursPropDialog,
+                     SettingsDialog, LoraConnectDialog)
 from lora_thread import LoraThread, default_lora_output_path
 from view_3d import View3DWindow
+from app_menus import MenusMixin
+from app_annotations import AnnotationsMixin
 from app_config import (PersistenceMixin, _CONFIG_DIR, _RECENT_FILE,
                          _LAST_TRACK_FILE, _SETTINGS_FILE, _LAYOUT_FILE,
-                         _MAX_RECENT, _TRACKS_DIR, _TRACKS_IMG_DIR, _TRACKS_JSON)
+                         _MAX_RECENT, _TRACKS_DIR, _TRACKS_JSON)
 
 
 def _to_portable_path(path: str) -> str:
@@ -79,7 +79,7 @@ def _extract_time_strs(gps) -> list:
 #  Fenêtre principale
 # ══════════════════════════════════════════════════════════════════════
 
-class MainWindow(PersistenceMixin, QMainWindow):
+class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('GPS Viewer')
@@ -118,156 +118,7 @@ class MainWindow(PersistenceMixin, QMainWindow):
     # ── Interface ────────────────────────────────────────────────────
 
     def _build_ui(self):
-        # Toolbar
-        tb = QToolBar(self)
-        self._tb = tb
-        tb.setMovable(False)
-        tb.setIconSize(QSize(18, 18))
-        tb.setStyleSheet('QToolBar { spacing: 4px; padding: 3px 6px; '
-                         'background: #f0f0f0; border-bottom: 1px solid #ccc; }')
-        self.addToolBar(tb)
-
-        act_open = QAction('☰  Trace GPS', self)
-        act_open.setShortcut('Ctrl+O')
-        act_open.setToolTip('Ajouter une trace GPS NMEA (Ctrl+O)')
-        act_open.triggered.connect(self._open_dialog)
-        tb.addAction(act_open)
-
-        act_home = QAction('⌂  Recentrer', self)
-        act_home.setShortcut('Ctrl+R')
-        act_home.setToolTip('Revenir à la vue initiale (Ctrl+R)')
-        act_home.triggered.connect(lambda: self._map.reset_view())
-        tb.addAction(act_home)
-
-        act_goto = QAction('◉  Coordonnées', self)
-        act_goto.setShortcut('Ctrl+G')
-        act_goto.setToolTip('Naviguer vers des coordonnées GPS (Ctrl+G)')
-        act_goto.triggered.connect(self._goto_coords)
-        tb.addAction(act_goto)
-
-        self._btn_tiles = QToolButton()
-        self._btn_tiles.setText('▦  Fond de carte')
-        self._btn_tiles.setToolTip('Changer le fond de carte (Ctrl+T)')
-        self._btn_tiles.setPopupMode(QToolButton.InstantPopup)
-        self._btn_tiles.setShortcut('Ctrl+T')
-        menu_tiles = QMenu(self._btn_tiles)
-        for key, info in self._TILE_SOURCES.items():
-            act = QAction(info['label'], self)
-            act.triggered.connect(lambda checked=False, k=key: self._select_tiles(k))
-            menu_tiles.addAction(act)
-        self._btn_tiles.setMenu(menu_tiles)
-        tb.addWidget(self._btn_tiles)
-
-        # ── Coloration de trace ──────────────────────────────────────
-        self._btn_color = QToolButton()
-        self._btn_color.setText('◆  Trace')
-        self._btn_color.setToolTip('Coloration de la trace')
-        self._btn_color.setPopupMode(QToolButton.InstantPopup)
-        menu_color = QMenu(self._btn_color)
-        for mode, label in [('flat', '— Couleur unie'),
-                             ('altitude', '▲  Altitude'),
-                             ('speed',    '⚡  Vitesse')]:
-            a = QAction(label, self)
-            a.triggered.connect(lambda c=False, m=mode: self._select_track_mode(m))
-            menu_color.addAction(a)
-        self._btn_color.setMenu(menu_color)
-        tb.addWidget(self._btn_color)
-
-        # ── Mesure de distance ───────────────────────────────────────
-        self._act_meas = QAction('↔  Mesure', self)
-        self._act_meas.setCheckable(True)
-        self._act_meas.setShortcut('Ctrl+D')
-        self._act_meas.setToolTip(
-            'Mesure de distance clic-à-clic (Ctrl+D)  •  Échap pour annuler')
-        tb.addAction(self._act_meas)
-
-        # ── Annotation photo ─────────────────────────────────────────
-        self._act_photo = QAction('◇  Photo', self)
-        self._act_photo.setCheckable(True)
-        self._act_photo.setToolTip(
-            'Annoter la carte avec une photo (P)  •  Clic pour choisir la position')
-        tb.addAction(self._act_photo)
-
-        # ── Annotation note ──────────────────────────────────────────
-        self._act_note = QAction('✎  Note', self)
-        self._act_note.setCheckable(True)
-        self._act_note.setToolTip(
-            'Ajouter une note sur la carte (N)  •  Clic pour choisir la position')
-        tb.addAction(self._act_note)
-
-        # ── Grille / miniature ───────────────────────────────────────
-        act_grid = QAction('⊞  Grille', self)
-        act_grid.setCheckable(True)
-        act_grid.setToolTip('Afficher la grille lat/lon (Ctrl+L)')
-        act_grid.setShortcut('Ctrl+L')
-        act_grid.toggled.connect(lambda v: self._map.toggle_grid(v))
-        tb.addAction(act_grid)
-
-        act_ov = QAction('⬢  Miniature', self)
-        act_ov.setCheckable(True)
-        act_ov.setToolTip('Afficher la miniature de localisation (Ctrl+M)')
-        act_ov.setShortcut('Ctrl+M')
-        act_ov.toggled.connect(lambda v: self._map.toggle_overview(v))
-        tb.addAction(act_ov)
-
-        act_contours = QAction('▲  Courbes', self)
-        act_contours.setCheckable(True)
-        act_contours.setToolTip(
-            'Afficher les courbes de niveau SRTM (30 m)\n'
-            'Premier affichage : téléchargement des tuiles SRTM (~quelques Mo)')
-        act_contours.toggled.connect(lambda v: self._map.toggle_contours(v))
-        tb.addAction(act_contours)
-
-        # ── Vue 3D ──────────────────────────────────────────────────
-        act_3d = QAction('◈  Vue 3D', self)
-        act_3d.setShortcut('Ctrl+3')
-        act_3d.setToolTip('Afficher la trace en 3D (altitude) (Ctrl+3)')
-        act_3d.triggered.connect(self._open_3d_view)
-        tb.addAction(act_3d)
-
-        # ── Réception LoRa live ──────────────────────────────────────
-        tb.addSeparator()
-
-        self._act_lora = QAction('◎  LoRa Live', self)
-        self._act_lora.setCheckable(True)
-        self._act_lora.setToolTip(
-            'Démarrer / arrêter la réception GPS en temps réel\n'
-            'via le récepteur LoRa branché en USB')
-        self._act_lora.toggled.connect(self._on_lora_toggled)
-        tb.addAction(self._act_lora)
-
-        self._lbl_lora_status = QLabel()
-        self._lbl_lora_status.setStyleSheet(
-            'color:#e67e22; padding:0 6px; font-size:11px; font-weight:bold;')
-        self._lbl_lora_status.setVisible(False)
-        tb.addWidget(self._lbl_lora_status)
-
-        # ── Sélecteur de trace active pour les graphiques ────────────
-        # Le séparateur et le widget sont gérés via leur QWidgetAction
-        # (setVisible sur le QWidget lui-même est ignoré dans un QToolBar)
-        _track_selector = QWidget()
-        _sel_layout = QHBoxLayout(_track_selector)
-        _sel_layout.setContentsMargins(4, 0, 4, 0)
-        _sel_layout.setSpacing(4)
-        _lbl_sel = QLabel('▧ Graphiques :')
-        _lbl_sel.setStyleSheet('color:#555; font-size:12px;')
-        self._track_combo = QComboBox()
-        self._track_combo.setFixedWidth(180)
-        self._track_combo.setToolTip(
-            'Choisir la trace affichée dans les graphiques et les statistiques')
-        self._track_combo.currentIndexChanged.connect(self._on_chart_track_changed)
-        _sel_layout.addWidget(_lbl_sel)
-        _sel_layout.addWidget(self._track_combo)
-        self._track_sel_sep    = tb.addSeparator()
-        self._track_sel_action = tb.addWidget(_track_selector)
-        self._track_sel_sep.setVisible(False)
-        self._track_sel_action.setVisible(False)
-
-        tb.addSeparator()
-
-        self._lbl_tb = QLabel('Aucun fichier chargé')
-        self._lbl_tb.setStyleSheet('color:#555; padding: 0 8px; font-size:12px;')
-        tb.addWidget(self._lbl_tb)
+        self._build_toolbar()
 
         # Canvases
         self._map       = MapCanvas()
@@ -398,120 +249,6 @@ class MainWindow(PersistenceMixin, QMainWindow):
 
     def _lora_log_clear(self):
         self._lora_log.clear()
-
-    def _build_menus(self):
-        mb = self.menuBar()
-
-        fm = mb.addMenu('Fichier')
-
-        a_new = QAction('Nouveau parcours…', self)
-        a_new.setShortcut('Ctrl+N')
-        a_new.setToolTip('Créer un nouveau parcours vide (Ctrl+N)')
-        a_new.triggered.connect(self._new_parcours)
-        fm.addAction(a_new)
-
-        fm.addSeparator()
-
-        a_open_json = QAction('Ouvrir un parcours…', self)
-        a_open_json.setToolTip('Ouvrir un fichier de trace JSON (annotations photo)')
-        a_open_json.triggered.connect(self._open_track_json)
-        fm.addAction(a_open_json)
-
-        a_gps = QAction('Ajouter une trace GPS…', self)
-        a_gps.setShortcut('Ctrl+O')
-        a_gps.setToolTip('Charger un fichier GPS NMEA sur la carte (Ctrl+O)')
-        a_gps.triggered.connect(self._open_dialog)
-        fm.addAction(a_gps)
-
-        fm.addSeparator()
-
-        a_props = QAction('Propriétés du parcours…', self)
-        a_props.setShortcut('Ctrl+I')
-        a_props.setToolTip('Modifier le titre et la description de ce parcours (Ctrl+I)')
-        a_props.triggered.connect(self._edit_parcours_props)
-        fm.addAction(a_props)
-
-        fm.addSeparator()
-        self._recent_menu = fm.addMenu('Fichiers récents JSON')
-        self._refresh_recent_menu()
-
-        fm.addSeparator()
-
-        self._act_save = QAction('Enregistrer', self)
-        self._act_save.setShortcut('Ctrl+S')
-        self._act_save.setToolTip('Enregistrer la trace photo (Ctrl+S)')
-        self._act_save.triggered.connect(self._track_save)
-        fm.addAction(self._act_save)
-
-        act_save_as = QAction('Enregistrer sous…', self)
-        act_save_as.setShortcut('Ctrl+Shift+S')
-        act_save_as.setToolTip('Enregistrer la trace photo sous un autre nom (Ctrl+Shift+S)')
-        act_save_as.triggered.connect(self._track_save_as)
-        fm.addAction(act_save_as)
-
-        fm.addSeparator()
-
-        a2 = QAction('Quitter', self)
-        a2.setShortcut('Ctrl+Q')
-        a2.triggered.connect(self.close)
-        fm.addAction(a2)
-
-        nm = mb.addMenu('Navigation')
-        a_goto = QAction('Aller aux coordonnées…', self)
-        a_goto.setShortcut('Ctrl+G')
-        a_goto.triggered.connect(self._goto_coords)
-        nm.addAction(a_goto)
-
-        a_home = QAction('Recentrer la trace', self)
-        a_home.setShortcut('Ctrl+R')
-        a_home.triggered.connect(lambda: self._map.reset_view())
-        nm.addAction(a_home)
-
-        nm.addSeparator()
-        self._act_fullscreen = QAction('Plein écran (carte)', self)
-        self._act_fullscreen.setCheckable(True)
-        self._act_fullscreen.setShortcut('F11')
-        self._act_fullscreen.toggled.connect(self._set_fullscreen)
-        nm.addAction(self._act_fullscreen)
-
-        # En plein écran, la barre d'outils et la barre de menus sont masquées :
-        # Qt désactive alors les raccourcis de leurs actions. On rattache les
-        # actions à raccourci à la fenêtre elle-même pour qu'ils restent actifs.
-        for act in self._tb.actions() + [a for m in mb.findChildren(QMenu)
-                                         for a in m.actions()]:
-            if not act.shortcut().isEmpty():
-                self.addAction(act)
-
-        om = mb.addMenu('Outils')
-        a_cache_info = QAction('Informations sur le cache…', self)
-        a_cache_info.triggered.connect(self._cache_info)
-        om.addAction(a_cache_info)
-
-        a_cache_clear = QAction('Vider le cache de tuiles…', self)
-        a_cache_clear.triggered.connect(self._cache_clear)
-        om.addAction(a_cache_clear)
-
-        pm = mb.addMenu('Paramétrage')
-
-        self._act_cursor_info = QAction('Afficher distance parcourue / restante', self)
-        self._act_cursor_info.setCheckable(True)
-        self._act_cursor_info.setChecked(True)
-        self._act_cursor_info.setToolTip(
-            'Affiche la boîte distance parcouru / restant\n'
-            'à côté du curseur sur la carte et les graphiques')
-        self._act_cursor_info.toggled.connect(self._on_toggle_cursor_info)
-        pm.addAction(self._act_cursor_info)
-
-        pm.addSeparator()
-        a_prefs = QAction('Préférences…', self)
-        a_prefs.setShortcut('Ctrl+,')
-        a_prefs.triggered.connect(self._on_prefs)
-        pm.addAction(a_prefs)
-
-        hm = mb.addMenu('Aide')
-        a3 = QAction('À propos', self)
-        a3.triggered.connect(self._about)
-        hm.addAction(a3)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -923,166 +660,6 @@ class MainWindow(PersistenceMixin, QMainWindow):
             _TILE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
             cx.set_cache_dir(str(_TILE_CACHE_DIR))
             self._sb.showMessage('Cache de tuiles vidé.')
-
-    # ── Annotations photo ─────────────────────────────────────────────
-
-    def _on_photo_clicked(self, index: int):
-        """Ouvre la photo en plein format ; sauvegarde titre/description ; supprime si demandé."""
-        if index >= len(self._map._photo_data):
-            return
-        entry = self._map._photo_data[index]
-        orig  = entry['orig_path']
-        if not Path(orig).exists():
-            QMessageBox.warning(self, 'Fichier introuvable',
-                                f'La photo originale est introuvable :\n{orig}')
-            return
-        dlg = PhotoViewDialog(
-            orig, entry['lat'], entry['lon'],
-            entry.get('titre', ''), entry.get('description', ''),
-            thumb_path=entry.get('thumb_path', ''), parent=self)
-        dlg.exec_()
-        if dlg.deletion_requested:
-            self._delete_photo(index)
-        else:
-            new_titre = dlg._titre_edit.text().strip()
-            new_desc  = dlg._desc_edit.toPlainText().strip()
-            title_changed = (new_titre != entry.get('titre', '')
-                             or new_desc != entry.get('description', ''))
-            if title_changed:
-                self._map._photo_data[index]['titre']       = new_titre
-                self._map._photo_data[index]['description'] = new_desc
-                self._save_track_json()
-            if dlg.rotation_applied:
-                self._map.reload_photo_annotations()
-                self._sb.showMessage('Photo pivotée et miniature mise à jour.')
-            elif title_changed:
-                self._sb.showMessage('Annotations photo mises à jour.')
-
-    def _delete_photo(self, index: int):
-        """Supprime fichiers, artistes carte et entrée JSON pour l'annotation index."""
-        if index >= len(self._map._photo_data):
-            return
-        entry = self._map._photo_data[index]
-
-        # Suppression des fichiers
-        for key in ('orig_path', 'thumb_path'):
-            p = Path(entry.get(key, ''))
-            if p.exists():
-                try:
-                    p.unlink()
-                except Exception:
-                    pass
-
-        # Retrait des artistes de la carte
-        if index < len(self._map._photo_artists):
-            for art in self._map._photo_artists[index]:
-                try:
-                    art.remove()
-                except Exception:
-                    pass
-            self._map._photo_artists.pop(index)
-
-        self._map._photo_data.pop(index)
-        self._map.draw_idle()
-
-        # Mise à jour du JSON
-        self._save_track_json()
-        self._sb.showMessage(
-            f'Photo supprimée : {Path(entry["orig_path"]).name}')
-
-    def _on_photo_requested(self, x_m: float, y_m: float):
-        """Clic en mode photo : ouvre le sélecteur, copie et affiche la photo."""
-        from PIL import Image as PilImage
-        lat, lon = _webmerc_to_latlon(x_m, y_m)
-        path, _ = QFileDialog.getOpenFileName(
-            self, 'Choisir une photo', os.getcwd(),
-            'Images (*.jpg *.jpeg *.png *.bmp *.gif *.tiff *.webp)'
-            ';;Tous les fichiers (*)')
-        if not path:
-            return
-        try:
-            orig_path, thumb_path = self._save_photo(path)
-        except Exception as exc:
-            QMessageBox.critical(self, 'Erreur photo',
-                                 f'Impossible de traiter la photo :\n{exc}')
-            return
-        self._map.add_photo_annotation(
-            x_m, y_m, lat, lon, str(orig_path), str(thumb_path))
-        self._save_track_json()
-        self._sb.showMessage(
-            f'Photo ajoutée : {Path(orig_path).name}'
-            f'  •  {lat:.6f}° N  {lon:.6f}° E')
-
-    # ── Mode photo : exclusivité avec note ──────────────────────────
-
-    def _on_photo_mode_toggled(self, active: bool):
-        if active and self._act_note.isChecked():
-            self._act_note.blockSignals(True)
-            self._act_note.setChecked(False)
-            self._act_note.blockSignals(False)
-            self._map.set_note_mode(False)
-        self._map.set_photo_mode(active)
-
-    # ── Annotations note ─────────────────────────────────────────────
-
-    def _on_note_mode_toggled(self, active: bool):
-        if active and self._act_photo.isChecked():
-            self._act_photo.blockSignals(True)
-            self._act_photo.setChecked(False)
-            self._act_photo.blockSignals(False)
-            self._map.set_photo_mode(False)
-        self._map.set_note_mode(active)
-
-    def _on_note_requested(self, x_m: float, y_m: float):
-        lat, lon = _webmerc_to_latlon(x_m, y_m)
-        dlg = NoteDialog(self)
-        if dlg.exec_() != 1:   # QDialog.Accepted == 1
-            return
-        if not dlg.titre and not dlg.description:
-            return
-        self._map.add_note_annotation(
-            x_m, y_m, lat, lon, dlg.titre, dlg.description)
-        self._save_track_json()
-        self._sb.showMessage(
-            f'Note ajoutée : {dlg.titre or "(sans titre)"}  •  '
-            f'{lat:.6f}° N  {lon:.6f}° E')
-
-    def _on_note_clicked(self, index: int):
-        if index >= len(self._map._note_data):
-            return
-        entry = self._map._note_data[index]
-        dlg = NoteDialog(
-            self,
-            titre       = entry.get('titre', ''),
-            description = entry.get('description', ''),
-            edit_mode   = True)
-        if dlg.exec_() != 1:
-            return
-        if dlg.deleted:
-            self._map.delete_note(index)
-            self._save_track_json()
-            self._sb.showMessage('Note supprimée.')
-        else:
-            self._map.update_note(index, dlg.titre, dlg.description)
-            self._save_track_json()
-            self._sb.showMessage('Note mise à jour.')
-
-    def _save_photo(self, src_path: str):
-        """Copie l'original et crée la miniature dans tracks/images/."""
-        from PIL import Image as PilImage
-        _TRACKS_IMG_DIR.mkdir(parents=True, exist_ok=True)
-        ts  = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-        ext = Path(src_path).suffix.lower() or '.jpg'
-        i   = 1
-        while (_TRACKS_IMG_DIR / f'photo_{ts}_{i:03d}{ext}').exists():
-            i += 1
-        orig_dest  = _TRACKS_IMG_DIR / f'photo_{ts}_{i:03d}{ext}'
-        thumb_dest = _TRACKS_IMG_DIR / f'photo_{ts}_{i:03d}_thumb.jpg'
-        shutil.copy2(src_path, orig_dest)
-        img = PilImage.open(src_path).convert('RGB')
-        img.thumbnail((80, 80), PilImage.LANCZOS)
-        img.save(thumb_dest, 'JPEG', quality=85)
-        return orig_dest, thumb_dest
 
     def _save_track_json(self):
         """Sauvegarde toutes les positions photo dans le fichier de trace actif."""

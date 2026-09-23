@@ -9,9 +9,12 @@ gpsloraviewer/
 ├── gps_viewer/                    # Application desktop PyQt5
 │   ├── gps_viewer.py              #   Point d'entrée principal (MainWindow)
 │   ├── app_config.py              #   Chemins de config + persistance (préférences, mise en page, récents)
+│   ├── app_menus.py               #   Barre d'outils + menus de la fenêtre principale
+│   ├── app_annotations.py         #   Gestion des annotations photo / note (dialogues, copie des photos)
 │   ├── gps_nmea.py                #   Parseur NMEA, checksum, formatage
 │   ├── map_canvas.py              #   Widget carte (matplotlib + contextily)
 │   ├── map_tiles.py               #   Cache/threads de tuiles (OSM, SRTM), Douglas-Peucker
+│   ├── map_tools.py               #   Outils de la carte : mesure, annotations photo / note
 │   ├── chart_canvas.py            #   Widget graphiques
 │   ├── stats_panel.py             #   Panneau de statistiques
 │   ├── dialogs.py                 #   Boîtes de dialogue

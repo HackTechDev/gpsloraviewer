@@ -530,8 +530,11 @@ gpsloraviewer/
 ├── gps_viewer/
 │   ├── gps_viewer.py      # Fenêtre principale + point d'entrée
 │   ├── app_config.py      # Config + persistance (préférences, mise en page, récents)
+│   ├── app_menus.py       # Barre d'outils + menus
+│   ├── app_annotations.py # Annotations photo / note côté fenêtre (dialogues)
 │   ├── map_canvas.py      # Widget carte (matplotlib + contextily)
 │   ├── map_tiles.py       # Cache/threads de tuiles (OSM, SRTM), Douglas-Peucker
+│   ├── map_tools.py       # Outils de la carte : mesure, photos, notes
 │   ├── chart_canvas.py    # Graphiques altitude / vitesse
 │   ├── stats_panel.py     # Panneau de statistiques
 │   ├── gps_nmea.py        # Parseur NMEA, checksum, modèle de données GPS
