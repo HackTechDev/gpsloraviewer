@@ -29,7 +29,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen
 
-from gps_nmea import GPSData, load_points, to_webmerc
+from gps_nmea import GPSData, load_points, to_webmerc, speed_kmh_between
 from map_canvas import (MapCanvas, _TRACK_PALETTE, _TILE_CACHE_DIR,
                          _cache_size_mb, _retire_thread)
 from chart_canvas import ChartCanvas, C_ALT, C_SPD
@@ -194,6 +194,8 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
         self._map.note_clicked.connect(self._on_note_clicked)
         self._act_note.toggled.connect(self._on_note_mode_toggled)
         self._map.playback_index_changed.connect(self._on_hover)
+        self._act_follow.toggled.connect(self._map.set_live_follow)
+        self._map.live_follow_changed.connect(self._act_follow.setChecked)
 
     def _build_lora_log_panel(self) -> QWidget:
         """Construit le panneau de log LoRa (affiché uniquement en mode live)."""
@@ -983,6 +985,7 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
         self._lora_thread.start()
 
         self._map.start_live_track()
+        self._act_follow.setVisible(True)
         self._lora_chart_timer.start()
 
         # ── Panneau de log ─────────────────────────────────────────
@@ -1012,6 +1015,7 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
             self._lora_thread = None
 
         self._map.stop_live_track()
+        self._act_follow.setVisible(False)
         if self._lora_monitor is not None:
             self._lora_monitor.reception_stopped()
 
@@ -1050,8 +1054,13 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
     def _on_lora_point(self, pt: dict):
         """Reçoit un point GPS valide depuis le thread LoRa (thread principal via signal Qt)."""
         x_m, y_m = to_webmerc(pt['lat'], pt['lon'])
+        speed = speed_kmh_between(self._lora_raw_points[-1], pt) \
+            if self._lora_raw_points else None
         self._lora_raw_points.append(pt)
-        self._map.append_live_point(x_m, y_m)
+        t_raw = pt.get('time', '')
+        self._map.append_live_point(
+            x_m, y_m, speed_kmh=speed,
+            time_str=t_raw.split('.')[0] + (' UTC' if t_raw.endswith('UTC') else ''))
 
         n = len(self._lora_raw_points)
 

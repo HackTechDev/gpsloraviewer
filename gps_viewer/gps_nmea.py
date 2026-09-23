@@ -66,6 +66,20 @@ def parse_time_s(time_str: str):
         return None
 
 
+def speed_kmh_between(p0: dict, p1: dict) -> float | None:
+    """Vitesse moyenne (km/h) entre deux points {lat, lon, time 'HH:MM:SS[.ss] UTC'},
+    ou None si l'écart de temps est inconnu ou nul."""
+    t0, t1 = parse_time_s(p0.get('time', '')), parse_time_s(p1.get('time', ''))
+    if t0 is None or t1 is None:
+        return None
+    dt = t1 - t0
+    if dt < 0:
+        dt += 86_400                         # passage de minuit UTC
+    if dt <= 0:
+        return None
+    return haversine_m(p0['lat'], p0['lon'], p1['lat'], p1['lon']) / dt * 3.6
+
+
 def _smooth(data: list, window: int = 5) -> list:
     hw = window // 2
     out = []

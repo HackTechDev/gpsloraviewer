@@ -15,6 +15,7 @@ gpsloraviewer/
 │   ├── map_canvas.py              #   Widget carte (matplotlib + contextily)
 │   ├── map_tiles.py               #   Cache/threads de tuiles (OSM, SRTM), Douglas-Peucker
 │   ├── map_tools.py               #   Outils de la carte : mesure, annotations photo / note
+│   ├── map_live.py                #   Trace temps réel LoRa Live (marqueur animé, cap, suivi)
 │   ├── chart_canvas.py            #   Widget graphiques
 │   ├── stats_panel.py             #   Panneau de statistiques
 │   ├── dialogs.py                 #   Boîtes de dialogue

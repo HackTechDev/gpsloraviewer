@@ -536,6 +536,7 @@ gpsloraviewer/
 │   ├── map_canvas.py      # Widget carte (matplotlib + contextily)
 │   ├── map_tiles.py       # Cache/threads de tuiles (OSM, SRTM), Douglas-Peucker
 │   ├── map_tools.py       # Outils de la carte : mesure, photos, notes
+│   ├── map_live.py        # Trace temps réel LoRa Live (marqueur animé, suivi)
 │   ├── chart_canvas.py    # Graphiques altitude / vitesse
 │   ├── stats_panel.py     # Panneau de statistiques
 │   ├── gps_nmea.py        # Parseur NMEA, checksum, modèle de données GPS
@@ -577,7 +578,8 @@ interface**, sans fichier intermédiaire.
 
 **Ce que vous devez voir :**
 - Un panneau **Log LoRa Live** apparaît sous les graphiques, listant chaque position reçue (heure, latitude, longitude, altitude, satellites, HDOP).
-- La trace s'affiche en direct sur la carte au fur et à mesure des réceptions.
+- La trace s'affiche en direct sur la carte au fur et à mesure des réceptions : le marqueur **glisse** vers chaque nouvelle position et se transforme en **flèche** orientée dans le sens de la marche ; une étiquette indique la **vitesse** et l'**heure UTC** du dernier point.
+- La carte **suit la position** (bouton **➤ Suivre position** coché dans la barre d'outils) : elle se recentre quand le mobile approche du bord, et zoome sur lui au premier point reçu si elle affichait une vue très large. Déplacer la carte à la main désactive le suivi, pour regarder ailleurs sans être ramené ; recochez **➤ Suivre position** pour revenir sur le mobile.
 - Les graphiques et le panneau de statistiques se rafraîchissent toutes les 3 secondes.
 - La barre d'outils affiche `⬤  LoRa Live — N pts`.
 

@@ -138,6 +138,16 @@ class MenusMixin:
         self._act_lora.toggled.connect(self._on_lora_toggled)
         tb.addAction(self._act_lora)
 
+        # Suivi de la position live (visible seulement pendant LoRa Live)
+        self._act_follow = QAction('➤  Suivre position', self)
+        self._act_follow.setCheckable(True)
+        self._act_follow.setChecked(True)
+        self._act_follow.setToolTip(
+            'La carte suit la position reçue en direct\n'
+            '(désactivé automatiquement si vous déplacez la carte)')
+        self._act_follow.setVisible(False)
+        tb.addAction(self._act_follow)
+
         self._lbl_lora_status = QLabel()
         self._lbl_lora_status.setStyleSheet(
             'color:#e67e22; padding:0 6px; font-size:11px; font-weight:bold;')

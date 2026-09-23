@@ -257,3 +257,26 @@ def test_decode_gga():
 ])
 def test_decode_rejects_other_lines(line):
     assert decode_nmea_fields(line) is None
+
+
+# ── speed_kmh_between (vitesse affichée sur la trace LoRa Live) ─────────
+
+from gps_nmea import speed_kmh_between   # noqa: E402
+
+
+def test_speed_between_points():
+    p0 = {'lat': 48.0, 'lon': 7.0, 'time': '12:00:00.00 UTC'}
+    p1 = {'lat': 48.0 + 100 / 111_195, 'lon': 7.0, 'time': '12:00:10.00 UTC'}  # ~100 m en 10 s
+    assert speed_kmh_between(p0, p1) == pytest.approx(36.0, rel=1e-3)
+
+
+def test_speed_across_midnight():
+    p0 = {'lat': 48.0, 'lon': 7.0, 'time': '23:59:55 UTC'}
+    p1 = {'lat': 48.0 + 100 / 111_195, 'lon': 7.0, 'time': '00:00:05 UTC'}
+    assert speed_kmh_between(p0, p1) == pytest.approx(36.0, rel=1e-3)
+
+
+@pytest.mark.parametrize('t1', ['12:00:00 UTC', '', 'n/a'])
+def test_speed_unknown_or_zero_interval(t1):
+    p0 = {'lat': 48.0, 'lon': 7.0, 'time': '12:00:00 UTC'}
+    assert speed_kmh_between(p0, {'lat': 48.1, 'lon': 7.0, 'time': t1}) is None
