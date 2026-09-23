@@ -40,6 +40,7 @@ gpsloraviewer/
 ├── runLoRaReceiver.sh             # Lanceur du récepteur LoRa en ligne de commande
 ├── requirements.txt               # Dépendances Python
 ├── requirements-dev.txt           # + pytest, pour lancer les tests
+├── ARDUINO.md                     # Réglages des firmwares Arduino (période d'émission LoRa…)
 ├── FEATURES.md                    # Description détaillée des fonctionnalités
 ├── IMPROVEMENTS.md                # Pistes d'amélioration
 ├── TUTORIAL.md                    # Didacticiel pas à pas
@@ -112,7 +113,7 @@ série) :
 > **Correctif appliqué** (`RadioHead.h`, ligne ~818) : ajout d'une garde `#elif defined(__AVR__)` pour utiliser `<util/atomic.h>` (avr-libc) au lieu de `<stdatomic.h>` (C11, non supporté par avr-g++ en mode C++).
 
 - Enregistre **toutes** les trames NMEA sur SD (`GPS00.txt` → `GPS99.txt`)
-- Transmet les trames `$GPRMC` via LoRa toutes les **10 s** — SF7 (défaut RadioHead), airtime ~70 ms, duty cycle EU433 < 1 %
+- Transmet les trames `$GPRMC` via LoRa toutes les **10 s** — SF7 (défaut RadioHead), airtime ~70 ms, duty cycle EU433 < 1 % ; pour changer cette période (`LORA_INTERVAL_MS`), voir [ARDUINO.md](ARDUINO.md)
 - Fonctionne en mode SD seul si le module LoRa est absent
 
 **LED (pin 13) :** clignote rapidement (init) · lentement (OK) · fixe (erreur SD)
