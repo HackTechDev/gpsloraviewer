@@ -1,6 +1,8 @@
 PyQt5
 matplotlib
 contextily
+requests
+xyzservices
 numpy
 Pillow
 folium

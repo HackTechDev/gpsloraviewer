@@ -146,7 +146,7 @@ Le bouton **▦ Fond de carte** dans la barre d'outils permet de choisir parmi :
 | Orthophoto IGN | Photographies aériennes IGN (France) |
 | Plan IGN | Cartographie topographique IGN (France) |
 
-Les tuiles téléchargées sont mises en **cache** sur le disque (`~/.cache/gps_viewer/tiles/`) et réutilisées lors des sessions suivantes.
+Les tuiles s'affichent au fur et à mesure de leur arrivée, en commençant par le centre de la vue ; pendant un zoom, l'image précédente reste visible (agrandie ou réduite) jusqu'à ce que les nouvelles tuiles soient là. Les tuiles téléchargées sont mises en **cache** en mémoire (retour instantané sur une zone déjà vue) et sur le disque (`~/.cache/gps_viewer/tiles/`), où elles sont réutilisées lors des sessions suivantes.
 
 > Si le message « Chargement des tuiles… » persiste plus de 20 secondes, l'application
 > affiche « Tuiles indisponibles » à la place — cela indique un problème réseau (pas de

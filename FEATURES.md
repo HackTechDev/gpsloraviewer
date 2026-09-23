@@ -91,10 +91,12 @@ Dès que deux traces ou plus sont chargées, un sélecteur **▧ Graphiques :** 
 
 Changement via le bouton `▦ Fond de carte` dans la barre d'outils.
 
-Le chargement des tuiles est asynchrone (`QThread`, ne bloque pas l'interface) et
-protégé par un délai de garde de 20 s : en cas de réseau indisponible ou trop lent, le
-message « Chargement des tuiles… » est remplacé par une indication d'erreur au lieu de
-rester affiché indéfiniment.
+Le chargement des tuiles est asynchrone (ne bloque pas l'interface) et se fait
+tuile par tuile : les tuiles apparaissent au fur et à mesure, du centre de la vue vers
+les bords, et l'image précédente reste affichée dessous jusqu'à ce que la nouvelle vue
+soit complète. Il est protégé par un délai de garde de 20 s sans progression : en cas
+de réseau indisponible ou trop lent, le message « Chargement des tuiles… » est remplacé
+par une indication d'erreur au lieu de rester affiché indéfiniment.
 
 ### Coloration de la trace
 
@@ -313,11 +315,12 @@ Les préférences sont persistées dans `~/.config/gps_viewer/settings.json`.
 
 ## Performances
 
-- **Chargement asynchrone des tuiles** : téléchargement en arrière-plan via `QThread` ; les traces sont immédiatement visibles pendant que les tuiles se chargent
+- **Chargement des tuiles tuile par tuile** (`map_tiles.TileLoader`) : téléchargements en parallèle sur des connexions HTTP keep-alive (2 connexions pour OpenStreetMap, conformément à sa politique d'usage ; 6 pour les autres sources), affichage progressif du centre vers les bords ; les traces sont immédiatement visibles pendant que les tuiles se chargent
+- **Réactivité au zoom / pan** : tuiles demandées 120 ms après le dernier cran de molette et au fil du glisser ; les demandes pour des vues déjà quittées sont annulées ; rendus regroupés (au plus un toutes les 60 ms pendant le chargement)
 - **Barre de progression** : indicateur pulsé dans la barre de statut pendant le téléchargement
-- **Cache LRU en mémoire** : 20 dernières vues conservées en RAM pour des aller-retours instantanés
-- **Cache persistant de tuiles** : `~/.cache/gps_viewer/tiles/` réutilisé entre les sessions
-- **Zoom adaptatif** : niveau de zoom OSM calculé automatiquement depuis l'étendue de la vue courante
+- **Cache LRU en mémoire** : 400 dernières tuiles décodées conservées en RAM — revenir sur une zone ou un niveau de zoom déjà vu est instantané
+- **Cache persistant de tuiles** : `~/.cache/gps_viewer/tiles/xyz/` réutilisé entre les sessions (lecture disque dans un pool de threads dédié)
+- **Zoom adaptatif** : niveau de zoom calculé depuis la résolution de l'écran (1 pixel de tuile ≈ 1 pixel affiché), plafonné au zoom max de la source et à 120 tuiles par vue
 - **Simplification Douglas-Peucker** : epsilon ≈ 1,5 pixel, recalculé à chaque zoom/pan ; activé pour les traces ≥ 500 points
 
 ## Cache de tuiles

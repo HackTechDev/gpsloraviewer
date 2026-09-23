@@ -27,7 +27,8 @@ from gps_nmea import (GPSData, to_webmerc, _webmerc_to_latlon, WEB_MERC_R,
                        parse_time_s, _fmt_dist, _fmt_elapsed)  # noqa: F401 — réexportés
 from map_tiles import (  # noqa: F401 — _TILE_CACHE_DIR/_cache_size_mb/_retire_thread réexportés
     _TILE_CACHE_DIR, _cache_size_mb, _retire_thread,
-    _douglas_peucker_mask, _TileCache, _TileWorker, _ContourWorker,
+    _douglas_peucker_mask, _ContourWorker,
+    TileLoader, TILE_PX, tile_size_m, tile_range, tiles_extent,
 )
 from map_tools import MeasureToolMixin, PhotoToolMixin, NoteToolMixin
 
@@ -81,10 +82,16 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
         # ('contextily-<uuid>') — voir _TILE_SOURCES dans gps_viewer.py.
         self._tile_headers  = {'User-Agent': 'GPS-Viewer/1.0'}
 
-        # ── Cache LRU en mémoire ─────────────────────────────────────
-        self._tile_cache  = _TileCache(maxsize=20)
-        self._tile_worker: _TileWorker | None = None
-        self._pending_key = None   # clé de la dernière requête en cours
+        # ── Chargement des tuiles (tuile par tuile, voir map_tiles) ──
+        self._tiles = TileLoader(self)
+        self._tiles.set_source(self._tile_source, self._tile_headers)
+        self._tiles.tile_ready.connect(self._on_tile_ready)
+        self._tiles.tile_failed.connect(self._on_tile_failed)
+        # Mosaïque en cours d'affichage : dict(src, z, x0, x1, y0, y1, arr,
+        # im, missing, errors) ; l'image précédente (_tile_im_back) reste
+        # affichée dessous tant que la nouvelle mosaïque est incomplète.
+        self._mosaic: dict | None = None
+        self._tile_im_back = None
 
         # ── Paramètres visuels configurables ────────────────────────
         self._track_linewidth   = 2.5   # épaisseur des traces (px)
@@ -149,9 +156,17 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
         self._contour_labels    = []   # Text objects des étiquettes (remove séparé)
         self._contour_req       = 0    # compteur de requête — invalide les résultats périmés
 
-        # ── Timer rechargement tuiles (débounce 450 ms) ─────────────
-        self._tile_timer = QTimer(singleShot=True, interval=450)
+        # ── Timer rechargement tuiles (débounce molette 120 ms) ─────
+        self._tile_timer = QTimer(singleShot=True, interval=120)
         self._tile_timer.timeout.connect(self._reload_tiles)
+        # Pendant un glisser (pan) : tuiles demandées toutes les 150 ms
+        self._pan_tile_timer = QTimer(self, singleShot=True, interval=150)
+        self._pan_tile_timer.timeout.connect(self._request_tiles)
+        # Rendu regroupé des tuiles qui arrivent (un rendu matplotlib coûte
+        # ~0,1 s : on en fait au plus un toutes les 60 ms pendant le
+        # chargement ; les tuiles lues sur disque tombent dans le premier)
+        self._tile_draw_timer = QTimer(self, singleShot=True, interval=60)
+        self._tile_draw_timer.timeout.connect(self.draw_idle)
 
         # ── Garde-fou : signale un chargement de tuiles trop long ───
         # (ex. réseau indisponible) au lieu de laisser « Chargement… »
@@ -357,29 +372,32 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
         """Change la source de tuiles et recharge la carte."""
         self._tile_source  = source
         self._tile_headers = headers or {}
+        self._tiles.set_source(source, self._tile_headers)
         if self._default_lim is not None:
             self._reload_tiles()
 
     # ── Zoom adaptatif ───────────────────────────────────────────────
 
-    def _compute_zoom(self) -> int:
-        """Calcule le niveau de zoom OSM optimal pour la vue courante."""
-        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
-        span_m = max(xl[1] - xl[0], yl[1] - yl[0])
-        if span_m <= 0:
-            return 12
-        # Circonférence équatoriale en Web Mercator ≈ 40 075 016 m ;
-        # +2 pour avoir ~4–8 tuiles visibles selon l'étendue.
-        z = int(math.log2(max(1, 40_075_016 / span_m))) + 2
-        return max(2, min(z, 18))
+    _MAX_TILES = 120   # garde-fou : nombre max de tuiles par vue
 
-    def _cache_key(self, zoom: int):
+    def _compute_zoom(self) -> int:
+        """Niveau de zoom dont la résolution correspond à celle de l'écran
+        (1 pixel de tuile ≈ 1 pixel affiché : ni flou, ni tuiles en trop)."""
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
-        r = 500  # grille 500 m : tolère les micro-décalages de pan
-        src = str(self._tile_source)[:100]
-        return (round(xl[0]/r), round(xl[1]/r),
-                round(yl[0]/r), round(yl[1]/r),
-                zoom, src)
+        span_m = xl[1] - xl[0]
+        pos    = self.ax.get_position()
+        ax_px  = pos.width * self.fig.get_size_inches()[0] * self.fig.dpi
+        if span_m <= 0 or ax_px <= 0:
+            return 12
+        # mètres/pixel d'une tuile au niveau z = tile_size_m(z) / 256
+        z = math.ceil(math.log2(tile_size_m(0) * ax_px / (TILE_PX * span_m)) - 0.25)
+        z = max(2, min(z, self._tiles.max_zoom))
+        while z > 2:
+            x0, x1, y0, y1 = tile_range(xl, yl, z)
+            if (x1 - x0 + 1) * (y1 - y0 + 1) <= self._MAX_TILES:
+                break
+            z -= 1
+        return z
 
     # ── Douglas-Peucker ──────────────────────────────────────────────
 
@@ -442,46 +460,93 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
     # ── Chargement asynchrone des tuiles ─────────────────────────────
 
     def _request_tiles(self):
-        """Lance le chargement des tuiles (cache LRU → thread si miss)."""
+        """Affiche la mosaïque de tuiles de la vue courante.
+
+        Les tuiles en mémoire sont posées immédiatement ; les autres sont
+        demandées au TileLoader (disque puis réseau, centre de la vue en
+        premier) et apparaissent au fur et à mesure (_on_tile_ready)."""
         if self._default_lim is None:
             return
-        zoom = self._compute_zoom()
-        key  = self._cache_key(zoom)
+        self._update_overview()
+        if self._grid_visible:
+            self._draw_grid()
 
-        # Annule le worker précédent s'il tourne encore
-        if self._tile_worker is not None and self._tile_worker.isRunning():
-            self._tile_worker.cancel()
-            _retire_thread(self._tile_worker)
-
-        cached = self._tile_cache.get(key)
-        if cached is not None:
-            self._apply_tiles(*cached)
-            self._update_overview()
-            if self._grid_visible:
-                self._draw_grid()
-            return
-
-        self._pending_key  = key
-        self._show_loading()
-        self.tile_loading.emit(True)
+        z = self._compute_zoom()
         xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
-        self._tile_worker = _TileWorker(
-            xl, yl, zoom, self._tile_source, self._tile_headers, key)
-        self._tile_worker.tiles_ready.connect(self._on_tiles_ready)
-        self._tile_worker.failed.connect(self._on_tiles_failed)
-        self._tile_worker.start()
-        self._tile_watchdog.start()   # relance le délai de garde à chaque requête
+        x0, x1, y0, y1 = tile_range(xl, yl, z)
+        src = self._tiles.src_key
+        cur = self._mosaic
+        if cur is not None and cur['im'] not in self.ax.images:
+            cur = self._mosaic = None            # axes vidés (ax.cla())
+        if self._tile_im_back is not None and self._tile_im_back not in self.ax.images:
+            self._tile_im_back = None
+        if (cur is not None and cur['src'] == src and cur['z'] == z
+                and (cur['x0'], cur['x1'], cur['y0'], cur['y1']) == (x0, x1, y0, y1)):
+            if cur['missing'] - cur['errors'].keys():
+                self._tiles.request(self._tile_priority(cur))
+            return                               # même mosaïque : rien à refaire
 
-    def _apply_tiles(self, img, ext):
-        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
-        for im in list(self.ax.images):
-            im.remove()
-        self.ax.imshow(img, extent=ext, interpolation='bilinear', zorder=0,
-                       alpha=self._map_alpha)
+        nx, ny = x1 - x0 + 1, y1 - y0 + 1
+        arr = np.zeros((ny * TILE_PX, nx * TILE_PX, 4), dtype=np.uint8)
+        missing = set()
+        for ty in range(y0, y1 + 1):
+            for tx in range(x0, x1 + 1):
+                img = self._tiles.get_cached(z, tx, ty)
+                if img is None:
+                    missing.add((tx, ty))
+                else:
+                    self._paste_tile(arr, tx - x0, ty - y0, img)
+
+        # L'image courante devient le fond provisoire si elle est complète
+        # (sinon on garde le fond provisoire existant, plus fiable).
+        if cur is not None:
+            if not cur['missing'] or self._tile_im_back is None:
+                self._remove_back_image()
+                self._tile_im_back = cur['im']
+                self._tile_im_back.set_zorder(-1)
+            else:
+                cur['im'].remove()
+
+        im = self.ax.imshow(arr, extent=tiles_extent(x0, x1, y0, y1, z),
+                            interpolation='bilinear', zorder=0,
+                            alpha=self._map_alpha)
         self.ax.set_xlim(xl)
         self.ax.set_ylim(yl)
+        self._mosaic = dict(src=src, z=z, x0=x0, x1=x1, y0=y0, y1=y1,
+                            arr=arr, im=im, missing=missing, errors={})
         self._clear_tile_error()
-        self.draw_idle()
+        if missing:
+            self._show_loading(draw=False)
+            self.tile_loading.emit(True)
+            self._tiles.request(self._tile_priority(self._mosaic))
+            self._tile_watchdog.start()
+            self._tile_draw_timer.start()
+        else:
+            self._mosaic_complete()
+
+    def _tile_priority(self, mosaic: dict) -> list:
+        """Tuiles manquantes, de la plus proche du centre de la vue à la plus loin."""
+        xl, yl = self.ax.get_xlim(), self.ax.get_ylim()
+        ts, half = tile_size_m(mosaic['z']), tile_size_m(0) / 2
+        cx_t = ((xl[0] + xl[1]) / 2 + half) / ts - 0.5
+        cy_t = (half - (yl[0] + yl[1]) / 2) / ts - 0.5
+        todo = mosaic['missing'] - mosaic['errors'].keys()
+        return [(mosaic['z'], tx, ty) for tx, ty in
+                sorted(todo, key=lambda t: (t[0] - cx_t) ** 2 + (t[1] - cy_t) ** 2)]
+
+    @staticmethod
+    def _paste_tile(arr, col: int, row: int, img):
+        r, c = row * TILE_PX, col * TILE_PX
+        arr[r:r + TILE_PX, c:c + TILE_PX, :3] = img
+        arr[r:r + TILE_PX, c:c + TILE_PX, 3]  = 255
+
+    def _remove_back_image(self):
+        if self._tile_im_back is not None:
+            try:
+                self._tile_im_back.remove()
+            except Exception:
+                pass
+            self._tile_im_back = None
 
     def _clear_tile_error(self):
         """Efface le message « Tuiles indisponibles » et le fond associé,
@@ -491,20 +556,54 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
         if self._error_text is not None:
             self._error_text.set_visible(False)
 
-    def _on_tiles_ready(self, img, ext, key):
-        self._tile_watchdog.stop()
-        if key != self._pending_key:
+    def _mosaic_for(self, src: str, z: int, x: int, y: int):
+        m = self._mosaic
+        if (m is None or m['src'] != src or m['z'] != z
+                or (x, y) not in m['missing'] or m['im'] not in self.ax.images):
+            return None
+        return m
+
+    def _on_tile_ready(self, src: str, z: int, x: int, y: int, img):
+        m = self._mosaic_for(src, z, x, y)
+        if m is None:
+            return                     # tuile d'une vue quittée (reste en cache)
+        self._paste_tile(m['arr'], x - m['x0'], y - m['y0'], img)
+        m['missing'].discard((x, y))
+        m['errors'].pop((x, y), None)
+        m['im'].set_data(m['arr'])
+        self._tile_watchdog.start()    # progression : relance le délai de garde
+        if not self._tile_draw_timer.isActive():
+            self._tile_draw_timer.start()
+        self._check_mosaic_done()
+
+    def _on_tile_failed(self, src: str, z: int, x: int, y: int, msg: str):
+        m = self._mosaic_for(src, z, x, y)
+        if m is None:
             return
-        self._tile_cache.put(key, (img, ext))
-        self._apply_tiles(img, ext)
-        self._hide_loading()
+        m['errors'][(x, y)] = msg
+        self._check_mosaic_done()
+
+    def _check_mosaic_done(self):
+        m = self._mosaic
+        if m['missing'] and set(m['errors']) != m['missing']:
+            return                     # encore des tuiles en route
+        if m['errors']:
+            n   = len(m['errors'])
+            msg = next(iter(m['errors'].values()))
+            self._on_tiles_failed(f'{n} tuile(s) — {msg}')
+        else:
+            self._mosaic_complete()
+
+    def _mosaic_complete(self):
+        self._tile_watchdog.stop()
+        self._tile_draw_timer.stop()
+        self._remove_back_image()
+        self._hide_loading()           # → draw_idle
         self.tile_loading.emit(False)
-        self._update_overview()
-        if self._grid_visible:
-            self._draw_grid()
 
     def _on_tiles_failed(self, msg: str):
         self._tile_watchdog.stop()
+        self._tile_draw_timer.stop()
         self._hide_loading()
         self.tile_loading.emit(False)
         self.ax.set_facecolor('#d9e8f5')
@@ -523,20 +622,16 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
         self.draw_idle()
 
     def _on_tile_timeout(self):
-        """Le téléchargement des tuiles dépasse le délai de garde (20 s).
+        """Aucune tuile n'est arrivée depuis 20 s alors qu'il en manque.
 
-        Le thread réseau (_TileWorker) peut rester bloqué indéfiniment côté
-        système (résolution DNS notamment, non bornée par le timeout HTTP) ;
-        on ne peut pas l'interrompre de force, mais on informe l'utilisateur
-        au lieu de laisser « Chargement des tuiles… » affiché sans fin. Un
-        résultat tardif du worker sera ignoré (clé périmée) ou, s'il arrive
-        pour la vue toujours active, appliqué normalement.
+        Un appel réseau peut rester bloqué côté système (résolution DNS
+        notamment, non bornée par le timeout HTTP) ; on informe l'utilisateur
+        au lieu de laisser « Chargement des tuiles… » affiché sans fin. Les
+        tuiles qui arriveraient plus tard sont tout de même affichées.
         """
-        if self._tile_worker is not None and self._tile_worker.isRunning():
-            self._tile_worker.cancel()
         self._on_tiles_failed('délai dépassé — vérifier la connexion réseau')
 
-    def _show_loading(self):
+    def _show_loading(self, draw: bool = True):
         self._clear_tile_error()   # une nouvelle tentative efface l'ancienne erreur
         if self._loading_text is None:
             self._loading_text = self.ax.text(
@@ -547,7 +642,8 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
                 zorder=20)
         else:
             self._loading_text.set_visible(True)
-        self.draw_idle()
+        if draw:
+            self.draw_idle()
 
     def _hide_loading(self):
         if self._loading_text is not None:
@@ -711,7 +807,7 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
             if self._contour_sets:
                 self._clear_contours()
         self.draw_idle()
-        self._tile_timer.start()   # recharge les tuiles 450 ms après le dernier scroll
+        self._tile_timer.start()   # recharge les tuiles 120 ms après le dernier scroll
 
     # ── Pan (clic gauche + glisser) ──────────────────────────────────
 
@@ -786,6 +882,8 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
             self.ax.set_xlim(xl0[0] - dx, xl0[1] - dx)
             self.ax.set_ylim(yl0[0] - dy, yl0[1] - dy)
             self.draw_idle()
+            if not self._pan_tile_timer.isActive():
+                self._pan_tile_timer.start()   # tuiles au fil du glisser
 
     def _on_release(self, event):
         if self._measure_mode:
@@ -973,11 +1071,13 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
             self._contour_worker = None
         self._contour_sets   = []
         self._contour_labels = []
-        if self._tile_worker is not None:
-            self._tile_worker.cancel()
-            _retire_thread(self._tile_worker)
-            self._tile_worker = None
+        self._tiles.request([])        # annule les tuiles en attente
+        self._mosaic       = None
+        self._tile_im_back = None
+        self._tile_watchdog.stop()
+        self._tile_draw_timer.stop()
         self._tile_timer.stop()
+        self._pan_tile_timer.stop()
         self._meas_timer.stop()
         self._play_timer.stop()
         self._playing = False
@@ -1245,7 +1345,10 @@ class MapCanvas(MeasureToolMixin, PhotoToolMixin, NoteToolMixin, FigureCanvas):
 
     def set_map_alpha(self, alpha: float):
         self._map_alpha = max(0.0, min(1.0, alpha))
-        self._reload_tiles()
+        for im in (self._mosaic and self._mosaic['im'], self._tile_im_back):
+            if im is not None:
+                im.set_alpha(self._map_alpha)
+        self.draw_idle()
 
     def set_photo_marker_size(self, zoom: float, cross: int):
         self._photo_zoom       = zoom
