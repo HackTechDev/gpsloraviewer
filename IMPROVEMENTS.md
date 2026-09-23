@@ -92,7 +92,7 @@
 
 ## Qualité du code
 
-- **Étendre les tests automatisés** : `tests/test_gps_nmea.py` couvre le parseur NMEA et le modèle `GPSData` ; le reste de l'application (Qt/matplotlib) n'a pas de tests
+- **Étendre les tests automatisés** : `tests/test_gps_nmea.py` couvre le parseur NMEA et le modèle `GPSData`, `tests/test_lora_common.py` l'aide aux erreurs de port série ; le reste de l'application (Qt/matplotlib) n'a pas de tests
 
 ## Documentation et packaging
 

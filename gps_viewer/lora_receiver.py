@@ -23,7 +23,8 @@ except ImportError:
     sys.exit(1)
 
 from gps_nmea import verify_checksum
-from lora_common import detect_port, default_lora_output_path, BAUD_RATE_DEFAULT
+from lora_common import (detect_port, default_lora_output_path, BAUD_RATE_DEFAULT,
+                         serial_error_hint)
 
 BAUD_RATE = BAUD_RATE_DEFAULT
 
@@ -80,6 +81,9 @@ def main():
 
     except serial.SerialException as e:
         print(f"\nErreur port série : {e}")
+        hint = serial_error_hint(e, port, command='./runLoRaReceiver.sh')
+        if hint:
+            print(f"\n{hint}")
         sys.exit(1)
     except KeyboardInterrupt:
         print(f"\nArrêt — {nmea_count} trames NMEA enregistrées dans {out_path}"

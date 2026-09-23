@@ -584,3 +584,18 @@ interface**, sans fichier intermédiaire.
 Re-cliquez sur **◎ LoRa Live**. Si au moins deux positions valides ont été reçues, l'application propose de charger la trace enregistrée (`tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`) sur la carte, comme n'importe quelle autre trace GPS.
 
 > Le bouton **Vider** du panneau de log efface l'historique affiché sans arrêter la réception.
+
+### Dépannage : « Permission non accordée » sur le port série
+
+Si la connexion échoue avec `[Errno 13] … Permission non accordée: '/dev/ttyUSB0'`, votre compte n'a pas le droit d'ouvrir le port : sous Linux, les ports série USB sont réservés au groupe `dialout` (Debian/Ubuntu ; `uucp` sur Arch).
+
+1. Ajoutez votre compte au groupe (une seule fois) :
+   ```bash
+   sudo usermod -aG dialout $USER
+   ```
+2. **Fermez puis rouvrez votre session** (ou redémarrez) : l'appartenance au groupe n'est prise en compte qu'à la connexion. `id -Gn` doit alors lister `dialout`.
+3. Pour tester sans fermer la session : `sg dialout -c ./runGPSLoRa.sh`.
+
+Le message d'erreur de l'application indique directement la marche à suivre : il nomme le groupe réel du port et précise, si vous êtes déjà membre du groupe, qu'il ne reste qu'à rouvrir la session. Il guide aussi pour un port **déjà utilisé** (moniteur série de l'IDE Arduino, `lora_receiver.py` lancé en parallèle…) ou **introuvable** (Arduino débranché, câble USB d'alimentation seule).
+
+> N'utilisez pas `sudo ./runGPSLoRa.sh` ni `sudo chmod 666 /dev/ttyUSB0` : le premier crée configuration et cache au nom de root, le second est perdu à chaque rebranchement.

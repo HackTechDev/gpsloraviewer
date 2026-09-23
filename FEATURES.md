@@ -221,6 +221,7 @@ La barre d'état (bas de fenêtre) et la barre d'outils (haut) affichent égalem
 - La trace s'affiche en direct sur la carte à mesure des réceptions ; graphiques et statistiques se rafraîchissent toutes les 3 s
 - Chaque position reçue est enregistrée dans `tracks/gps/LORA_YYYYMMDD_HHMMSS.txt`
 - À l'arrêt de la réception : propose de charger la trace enregistrée sur la carte (si au moins 2 positions valides ont été reçues)
+- **Aide en cas d'échec d'ouverture du port** (appli et `lora_receiver.py`, `lora_common.serial_error_hint`) : permission refusée → commande `usermod` pour le groupe réel du port (`dialout`, `uucp`…) ou, si le compte en est déjà membre, rappel de rouvrir la session et commande `sg` pour tester tout de suite ; port occupé par un autre programme ; port introuvable
 
 ## Navigation par coordonnées
 

@@ -34,7 +34,7 @@ gpsloraviewer/
 │   └── lib/
 │       └── Grove_LoRa_Radio/      #   Bibliothèque RadioHead patchée (AVR fix)
 ├── exemples/                      # Exemples de sketches Arduino
-├── tests/                         # Suite pytest (parseur NMEA, géométrie, formatage)
+├── tests/                         # Suite pytest (parseur NMEA, géométrie, formatage, aide port série)
 ├── runGPSLoRa.sh                  # Lanceur de l'application (utilise .venv/ s'il existe)
 ├── runLoRaReceiver.sh             # Lanceur du récepteur LoRa en ligne de commande
 ├── requirements.txt               # Dépendances Python
@@ -72,7 +72,8 @@ pip install -r requirements.txt
 ### Tests
 
 Suite `pytest` sur les parties testables sans interface (parseur NMEA,
-checksum, géométrie, formatage, modèle `GPSData`) :
+checksum, géométrie, formatage, modèle `GPSData`, aide aux erreurs de port
+série) :
 
 ```bash
 .venv/bin/pip install -r requirements-dev.txt
@@ -145,6 +146,24 @@ python3 gps_viewer/lora_receiver.py --port /dev/ttyUSB0
 - Écrit toute trame NMEA (`$...`) dans `gps_viewer/tracks/gps/LORA_YYYYMMDD_HHMMSS.txt` (en pratique `$GPRMC`, seule trame transmise par le firmware terrain)
 - Le fichier est utilisable directement dans GPS Viewer
 - Ctrl+C pour arrêter proprement
+
+#### Erreur « Permission non accordée » sur `/dev/ttyUSB0`
+
+```
+[Errno 13] could not open port /dev/ttyUSB0: [Errno 13] Permission non accordée
+```
+
+Sous Linux, les ports série USB appartiennent au groupe `dialout` (Debian/Ubuntu ; `uucp` sur Arch) et ne sont accessibles qu'à ses membres. Ajoutez votre compte au groupe, **une seule fois** :
+
+```bash
+sudo usermod -aG dialout $USER
+```
+
+puis **fermez et rouvrez votre session** (ou redémarrez) : le nouveau groupe n'est pris en compte qu'à la connexion. Vérifiez avec `id -Gn` que `dialout` apparaît. Pour tester sans fermer la session : `sg dialout -c ./runGPSLoRa.sh` (ou `./runLoRaReceiver.sh`).
+
+> Évitez `sudo chmod 666 /dev/ttyUSB0` (perdu à chaque rebranchement) et le lancement de l'application avec `sudo` (configuration et cache créés au nom de root).
+
+L'application et `lora_receiver.py` détectent cette erreur et affichent ces instructions, adaptées au groupe réel du port et au fait que le compte soit déjà membre du groupe ou non. Ils guident aussi pour un port occupé par un autre programme (moniteur série de l'IDE Arduino…) ou absent.
 
 ---
 

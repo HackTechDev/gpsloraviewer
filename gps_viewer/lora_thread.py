@@ -9,7 +9,8 @@ from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from gps_nmea import parse_gpgga, parse_gprmc, verify_checksum
-from lora_common import default_lora_output_path, BAUD_RATE_DEFAULT  # noqa: F401 — réexporté
+from lora_common import (default_lora_output_path, BAUD_RATE_DEFAULT,  # noqa: F401 — réexporté
+                         serial_error_hint)
 
 
 class LoraThread(QThread):
@@ -74,6 +75,8 @@ class LoraThread(QThread):
 
         except Exception as exc:
             if self._running:
-                self.error_occurred.emit(str(exc))
+                msg  = str(exc)
+                hint = serial_error_hint(exc, self._port)
+                self.error_occurred.emit(f'{msg}\n\n{hint}' if hint else msg)
 
         self._running = False
