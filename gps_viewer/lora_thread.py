@@ -20,6 +20,9 @@ class LoraThread(QThread):
     point_received = pyqtSignal(dict)
     # Erreur fatale (port inaccessible, déconnexion…)
     error_occurred = pyqtSignal(str)
+    # Chaque ligne non vide reçue (trame NMEA ou diagnostic '#'), et pour
+    # les trames '$' la validité du checksum (True pour les autres lignes)
+    line_received  = pyqtSignal(str, bool)
 
     def __init__(self, port: str, baud: int = BAUD_RATE_DEFAULT,
                  output_path: 'Path | None' = None):
@@ -55,11 +58,16 @@ class LoraThread(QThread):
                     if not raw:
                         continue
 
-                    line = raw.decode('ascii', errors='replace').rstrip()
+                    # utf-8 : les messages '#' du firmware contiennent des accents/tirets
+                    line = raw.decode('utf-8', errors='replace').rstrip()
+                    if not line:
+                        continue
+                    valid = not line.startswith('$') or verify_checksum(line)
+                    self.line_received.emit(line, valid)
 
                     # Toutes les trames NMEA au checksum valide sont
                     # sauvegardées (rejette le bruit radio de la liaison LoRa)
-                    if line.startswith('$') and verify_checksum(line):
+                    if line.startswith('$') and valid:
                         f.write(line + '\r\n')
                         f.flush()
 

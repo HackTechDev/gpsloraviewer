@@ -216,3 +216,44 @@ def test_gpsdata_elevation_gain_loss_thresholded():
     gps = GPSData(points, '/tmp/fake.txt')
     assert gps.elev_gain == pytest.approx(10.0)
     assert gps.elev_loss == pytest.approx(15.0)
+
+
+# ── decode_nmea_fields (moniteur de réception LoRa) ──────────────────────
+
+from gps_nmea import decode_nmea_fields   # noqa: E402
+
+NOFIX_RMC = '$GPRMC,000243.800,V,,,,,0.00,0.00,060180,,,N*4F'
+
+
+def test_decode_rmc_without_fix_keeps_time_and_date():
+    f = decode_nmea_fields(NOFIX_RMC)
+    assert f['type'] == 'RMC' and f['fix'] is False
+    assert f['time'] == '00:02:43'
+    assert f['date'] == '06/01/1980'          # yy ≥ 80 → 19yy
+    assert 'lat' not in f and 'lon' not in f
+
+
+def test_decode_rmc_with_fix():
+    f = decode_nmea_fields(GOOD_RMC)
+    assert f['fix'] is True
+    assert f['lat'] == pytest.approx(48.1173)
+    assert f['lon'] == pytest.approx(11.516667, abs=1e-6)
+    assert f['speed_kmh'] == pytest.approx(22.4 * 1.852)
+    assert f['course'] == pytest.approx(84.4)
+    assert f['date'] == '23/03/1994'
+
+
+def test_decode_gga():
+    f = decode_nmea_fields(GOOD_GGA)
+    assert f['type'] == 'GGA' and f['fix'] is True
+    assert (f['sats'], f['hdop'], f['alt']) == (8, 0.9, 545.4)
+
+
+@pytest.mark.parametrize('line', [
+    '$GPRMC,000116.7',                                   # tronquée
+    GOOD_RMC[:-2] + '00',                                # mauvais checksum
+    '$GPGSV,3,1,11,03,03,111,00,04,15,270,00,06,01,010,00,13,06,292,00*74',
+    '# [3] RSSI: -71 dBm',
+])
+def test_decode_rejects_other_lines(line):
+    assert decode_nmea_fields(line) is None

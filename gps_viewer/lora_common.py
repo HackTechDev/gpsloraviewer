@@ -36,6 +36,25 @@ def default_lora_output_path() -> Path:
     return tracks_dir / f'LORA_{timestamp}.txt'
 
 
+_RSSI_RE = re.compile(r'^#\s*\[(\d+)\]\s*RSSI:\s*(-?\d+)\s*dBm')
+
+
+def parse_rssi_line(line: str):
+    """Ligne de diagnostic du récepteur rf95_server « # [12] RSSI: -71 dBm »
+    → (numéro de paquet, RSSI en dBm), ou None pour toute autre ligne."""
+    m = _RSSI_RE.match(line.strip())
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def rssi_quality(rssi: int) -> str:
+    """Appréciation du niveau de signal LoRa (SX1276, 433/868 MHz)."""
+    if rssi >= -90:
+        return 'bon'
+    if rssi >= -110:
+        return 'moyen'
+    return 'faible'
+
+
 def _error_errno(exc) -> int | None:
     """errno d'une erreur de port série (pyserial le met souvent dans le texte)."""
     code = getattr(exc, 'errno', None)

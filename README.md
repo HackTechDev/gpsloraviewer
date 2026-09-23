@@ -23,6 +23,7 @@ gpsloraviewer/
 │   ├── lora_common.py             #   Détection de port, chemin de sortie LoRa (partagé)
 │   ├── lora_receiver.py           #   Réception LoRa → fichier NMEA (ligne de commande, pyserial)
 │   ├── lora_thread.py             #   Réception LoRa en direct (QThread, intégrée à l'appli)
+│   ├── lora_monitor.py            #   Fenêtre « Données GPS reçues » (moniteur de réception LoRa)
 │   └── tracks/                    #   Données utilisateur (non versionnées)
 │       ├── gps/                   #     Traces NMEA brutes (GPS00.txt… LORA_*.txt)
 │       ├── images/                #     Photos annotées + miniatures
@@ -230,6 +231,7 @@ dehors de `$HOME` reste enregistré en absolu.
 | Ctrl+D | Outil de mesure |
 | Ctrl+G | Naviguer vers des coordonnées / rechercher un lieu |
 | F11 | Plein écran (carte seule) |
+| Ctrl+Shift+L | Fenêtre « Données GPS reçues » (LoRa) |
 | Ctrl+3 | Vue 3D |
 | P | Mode annotation photo |
 | Échap | Effacer les mesures |

@@ -66,3 +66,25 @@ def test_unknown_error_gives_no_hint():
 
 def test_port_group_fallback_when_port_missing():
     assert lora_common._port_group('/dev/nexistepas') == 'dialout'
+
+
+# ── Lignes de diagnostic du récepteur (rf95_server.ino) ─────────────────
+
+from lora_common import parse_rssi_line, rssi_quality   # noqa: E402
+
+
+def test_parse_rssi_line():
+    assert parse_rssi_line('# [12] RSSI: -71 dBm') == (12, -71)
+    assert parse_rssi_line('# [3] RSSI: -113 dBm\r') == (3, -113)
+
+
+@pytest.mark.parametrize('line', ['# LoRa OK @ 433.0 MHz', '# recv failed',
+                                  '$GPRMC,000243.800,V,,,,,0.00,0.00,060180,,,N*4F'])
+def test_parse_rssi_line_ignores_other_lines(line):
+    assert parse_rssi_line(line) is None
+
+
+@pytest.mark.parametrize('rssi, q', [(-60, 'bon'), (-90, 'bon'), (-91, 'moyen'),
+                                     (-110, 'moyen'), (-111, 'faible')])
+def test_rssi_quality(rssi, q):
+    assert rssi_quality(rssi) == q

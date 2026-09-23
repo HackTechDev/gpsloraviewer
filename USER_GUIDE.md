@@ -492,6 +492,7 @@ GPS Viewer  [mon_parcours.json]  Mon titre  — GPS03.txt
 | `Ctrl+D` | Activer / désactiver l'outil de mesure |
 | `Ctrl+G` | Naviguer vers des coordonnées / rechercher un lieu |
 | `F11` | Plein écran (carte seule) |
+| `Ctrl+Shift+L` | Fenêtre « Données GPS reçues » (LoRa) |
 | `Ctrl+3` | Ouvrir / fermer la vue 3D |
 | `Ctrl+,` | Ouvrir les Préférences |
 | `Ctrl+Q` | Quitter |
@@ -544,6 +545,7 @@ gpsloraviewer/
 │   ├── lora_common.py     # Détection de port, chemin de sortie LoRa (partagé)
 │   ├── lora_receiver.py   # Réception LoRa → fichier NMEA (ligne de commande)
 │   ├── lora_thread.py     # Réception LoRa en direct (QThread, intégrée à l'appli)
+│   ├── lora_monitor.py    # Fenêtre « Données GPS reçues » (moniteur LoRa)
 │   ├── logo.png           # Logo du splash screen (à créer)
 │   └── tracks/            # Données utilisateur (non versionnées)
 │       ├── gps/           # Traces NMEA brutes
@@ -578,6 +580,17 @@ interface**, sans fichier intermédiaire.
 - La trace s'affiche en direct sur la carte au fur et à mesure des réceptions.
 - Les graphiques et le panneau de statistiques se rafraîchissent toutes les 3 secondes.
 - La barre d'outils affiche `⬤  LoRa Live — N pts`.
+
+### Fenêtre « Données GPS reçues »
+
+Au démarrage de la réception, une petite fenêtre flottante **Données GPS reçues** s'ouvre en haut à droite. Elle montre en direct ce qu'envoie le récepteur, **même quand le GPS n'a pas encore de fix** : c'est le moyen de vérifier que la liaison radio fonctionne avant que les positions n'apparaissent sur la carte.
+
+- **État** : port utilisé, temps écoulé depuis la dernière trame (vert tant qu'il reste proche de la période d'émission de 10 s, orange puis rouge si les trames n'arrivent plus) et état du **fix GPS** (valide, ou « pas de fix — l'émetteur attend les satellites »).
+- **Dernière position décodée** : heure et date UTC, latitude, longitude, vitesse, cap ; altitude, satellites et HDOP si des trames GGA sont reçues. Sans fix, les champs de position affichent `—` plutôt qu'une ancienne position.
+- **Liaison radio** : RSSI du dernier paquet (bon ≥ −90 dBm, moyen jusqu'à −110 dBm, faible en dessous) et numéro de paquet, lus sur les lignes de diagnostic `#` du récepteur ; compteurs de trames NMEA valides, avec fix et rejetées (checksum invalide).
+- **Trames brutes reçues** : les 200 dernières lignes, diagnostics compris ; les trames corrompues sont marquées `✕`. Bouton **Vider**.
+
+Fermer la fenêtre **n'arrête pas** la réception. Pour la rouvrir : **Outils → Données GPS reçues (LoRa)…** (`Ctrl+Shift+L`). Après l'arrêt de la réception, elle indique « Réception arrêtée » et garde les dernières données affichées.
 
 ### Arrêter la réception
 

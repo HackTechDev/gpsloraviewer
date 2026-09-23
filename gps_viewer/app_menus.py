@@ -248,15 +248,14 @@ class MenusMixin:
         self._act_fullscreen.toggled.connect(self._set_fullscreen)
         nm.addAction(self._act_fullscreen)
 
-        # En plein écran, la barre d'outils et la barre de menus sont masquées :
-        # Qt désactive alors les raccourcis de leurs actions. On rattache les
-        # actions à raccourci à la fenêtre elle-même pour qu'ils restent actifs.
-        for act in self._tb.actions() + [a for m in mb.findChildren(QMenu)
-                                         for a in m.actions()]:
-            if not act.shortcut().isEmpty():
-                self.addAction(act)
-
         om = mb.addMenu('Outils')
+        a_monitor = QAction('Données GPS reçues (LoRa)…', self)
+        a_monitor.setShortcut('Ctrl+Shift+L')
+        a_monitor.setToolTip('Fenêtre des données GPS reçues en direct par le récepteur LoRa')
+        a_monitor.triggered.connect(self._show_lora_monitor)
+        om.addAction(a_monitor)
+        om.addSeparator()
+
         a_cache_info = QAction('Informations sur le cache…', self)
         a_cache_info.triggered.connect(self._cache_info)
         om.addAction(a_cache_info)
@@ -286,3 +285,11 @@ class MenusMixin:
         a3 = QAction('À propos', self)
         a3.triggered.connect(self._about)
         hm.addAction(a3)
+
+        # En plein écran, la barre d'outils et la barre de menus sont masquées :
+        # Qt désactive alors les raccourcis de leurs actions. On rattache les
+        # actions à raccourci à la fenêtre elle-même pour qu'ils restent actifs.
+        for act in self._tb.actions() + [a for m in mb.findChildren(QMenu)
+                                         for a in m.actions()]:
+            if not act.shortcut().isEmpty():
+                self.addAction(act)

@@ -130,6 +130,66 @@ def parse_gpgga(line: str):
             'alt': alt, 'sats': sats, 'hdop': hdop}
 
 
+def decode_nmea_fields(line: str) -> dict | None:
+    """Décode les champs d'une trame RMC ou GGA *même sans fix GPS*, pour
+    l'affichage (moniteur de réception). Contrairement à parse_gprmc /
+    parse_gpgga, ne rejette pas les trames sans position : renvoie ce qui est
+    présent (clés absentes si le champ est vide). None si la trame n'est ni
+    RMC ni GGA, ou si son checksum est invalide.
+
+    Clés possibles : type ('RMC'/'GGA'), time, date, fix (bool), lat, lon,
+    speed_kmh, course, alt, sats, hdop.
+    """
+    if not verify_checksum(line):
+        return None
+    body  = line.strip()[1:line.strip().find('*')]
+    parts = body.split(',')
+    kind  = parts[0][2:] if len(parts[0]) == 5 else ''
+    if kind not in ('RMC', 'GGA'):
+        return None
+    out = {'type': kind}
+
+    def _set(key, fn):
+        try:
+            v = fn()
+        except (ValueError, IndexError):
+            return
+        if v is not None:
+            out[key] = v
+
+    def _time(raw):
+        return f'{raw[0:2]}:{raw[2:4]}:{raw[4:6]}' if len(raw) >= 6 else None
+
+    def _date(raw):
+        # ddmmyy ; siècle selon la convention NMEA (yy < 80 → 20yy)
+        if len(raw) != 6:
+            return None
+        yy = int(raw[4:6])
+        return f'{raw[0:2]}/{raw[2:4]}/{2000 + yy if yy < 80 else 1900 + yy}'
+
+    def _latlon(i):
+        return (nmea_to_decimal(parts[i], parts[i + 1]),
+                nmea_to_decimal(parts[i + 2], parts[i + 3]))
+
+    _set('time', lambda: _time(parts[1]))
+    if kind == 'RMC':
+        out['fix'] = len(parts) > 2 and parts[2] == 'A'
+        _set('pos', lambda: _latlon(3) if parts[3] and parts[5] else None)
+        _set('speed_kmh', lambda: float(parts[7]) * 1.852 if parts[7] else None)
+        _set('course', lambda: float(parts[8]) if parts[8] else None)
+        _set('date', lambda: _date(parts[9]))
+    else:
+        _set('fix', lambda: int(parts[6] or 0) > 0)
+        out.setdefault('fix', False)
+        _set('pos', lambda: _latlon(2) if parts[2] and parts[4] else None)
+        _set('sats', lambda: int(parts[7]) if parts[7] else None)
+        _set('hdop', lambda: float(parts[8]) if parts[8] else None)
+        _set('alt', lambda: float(parts[9]) if parts[9] else None)
+    if 'pos' in out:
+        out['lat'], out['lon'] = out.pop('pos')
+    return out
+
+
 def load_points(filepath: str) -> list:
     pts = []
     with open(filepath, 'r', errors='replace') as f:

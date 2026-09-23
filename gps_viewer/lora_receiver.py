@@ -63,7 +63,7 @@ def main():
                 if not raw:
                     continue
 
-                line = raw.decode('ascii', errors='replace').rstrip()
+                line = raw.decode('utf-8', errors='replace').rstrip()
 
                 # Affichage temps réel (trames NMEA + lignes # de diagnostic)
                 print(line)

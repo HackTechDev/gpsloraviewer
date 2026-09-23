@@ -37,6 +37,7 @@ from stats_panel import StatsPanel
 from dialogs import (CoordDialog, ParcoursPropDialog,
                      SettingsDialog, LoraConnectDialog)
 from lora_thread import LoraThread, default_lora_output_path
+from lora_monitor import LoraMonitorWindow
 from view_3d import View3DWindow
 from app_menus import MenusMixin
 from app_annotations import AnnotationsMixin
@@ -103,6 +104,7 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
         self._lora_thread:      'LoraThread | None' = None
         self._lora_raw_points:  list                = []
         self._lora_output_path: 'Path | None'       = None
+        self._lora_monitor: 'LoraMonitorWindow | None' = None
         self._load_settings()
         self._build_ui()
         self._apply_settings_to_map()
@@ -975,6 +977,9 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
         self._lora_thread = LoraThread(port, baud, self._lora_output_path)
         self._lora_thread.point_received.connect(self._on_lora_point)
         self._lora_thread.error_occurred.connect(self._on_lora_error)
+        monitor = self._show_lora_monitor()
+        monitor.reception_started(port, baud)
+        self._lora_thread.line_received.connect(monitor.on_line)
         self._lora_thread.start()
 
         self._map.start_live_track()
@@ -1007,6 +1012,8 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
             self._lora_thread = None
 
         self._map.stop_live_track()
+        if self._lora_monitor is not None:
+            self._lora_monitor.reception_stopped()
 
         # Masque le log et restaure le ratio carte / graphiques
         self._lora_log_panel.setVisible(False)
@@ -1089,6 +1096,19 @@ class MainWindow(MenusMixin, AnnotationsMixin, PersistenceMixin, QMainWindow):
         self._chart_spd.load(gps.distances, gps.speeds, 'Vitesse (km/h)',
                              elapsed=gps.elapsed_times, time_strs=_time_strs)
         self._stats.refresh(gps)
+
+    def _show_lora_monitor(self) -> LoraMonitorWindow:
+        """Affiche (en la créant au besoin) la fenêtre des données GPS reçues."""
+        if self._lora_monitor is None:
+            self._lora_monitor = LoraMonitorWindow(self)
+            # En haut à droite de la fenêtre principale
+            geo = self.frameGeometry()
+            self._lora_monitor.move(
+                max(geo.left(), geo.right() - self._lora_monitor.width() - 40),
+                geo.top() + 90)
+        self._lora_monitor.show()
+        self._lora_monitor.raise_()
+        return self._lora_monitor
 
     def _on_lora_error(self, msg: str):
         """Erreur fatale du thread LoRa (ex : déconnexion USB)."""
